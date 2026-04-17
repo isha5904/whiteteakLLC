@@ -901,104 +901,78 @@ function generateSpecSvg(product) {
   const hero = readImageAsBase64(product.image);
   const rawSpecs = (product.specs || []).slice(0, 6);
   const specs = rawSpecs.map(categorizeSpec);
-  const brand = escapeSvg(product.brand || "");
   const name = escapeSvg(product.name || "");
-  const nameShort = name.length > 52 ? name.slice(0, 50) + "…" : name;
+  const nameShort = name.length > 58 ? name.slice(0, 56) + "…" : name;
 
-  // 2-column × up to 3-row grid of spec tiles on the left; product image on the right
-  const tileW = 215, tileH = 80, gapX = 14, gapY = 14;
-  const gridX = 40, gridY = 190;
-  const tiles = specs.map((s, i) => {
-    const col = i % 2, row = Math.floor(i / 2);
-    const x = gridX + col * (tileW + gapX);
-    const y = gridY + row * (tileH + gapY);
+  // Apple "What's in the Box" aesthetic: clean white bg, centered hero, 3×2 feature grid below
+  const tileW = 230, tileH = 110, gapX = 18;
+  const gridTopY = 340;
+  const gridStartX = (800 - (3 * tileW + 2 * gapX)) / 2;
+  const tiles = specs.slice(0, 6).map((s, i) => {
+    const col = i % 3, row = Math.floor(i / 3);
+    const x = gridStartX + col * (tileW + gapX);
+    const y = gridTopY + row * (tileH + 14);
     const label = escapeSvg(s.label);
     const rawVal = s.value.replace(new RegExp(`^${s.label}\\s*:?\\s*`, "i"), "");
-    const valTrim = rawVal.length > 26 ? rawVal.slice(0, 24) + "…" : rawVal;
+    const valTrim = rawVal.length > 28 ? rawVal.slice(0, 26) + "…" : rawVal;
     return `
       <g transform="translate(${x},${y})">
-        <rect width="${tileW}" height="${tileH}" rx="14" fill="#1a2332" stroke="#2a3b55" stroke-width="1"/>
-        <circle cx="34" cy="${tileH / 2}" r="22" fill="#0d9488" fill-opacity="0.15"/>
-        ${iconSvgAt(s.icon, 34, tileH / 2, 24, "#2dd4bf")}
-        <text x="66" y="${tileH / 2 - 6}" fill="#94a3b8" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="600" letter-spacing="1.2">${label.toUpperCase()}</text>
-        <text x="66" y="${tileH / 2 + 14}" fill="#f1f5f9" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="600">${escapeSvg(valTrim)}</text>
+        <rect width="${tileW}" height="${tileH}" rx="14" fill="#f7f8fa" stroke="#e5e7eb" stroke-width="1"/>
+        <circle cx="40" cy="36" r="22" fill="#0d9488" fill-opacity="0.1"/>
+        ${iconSvgAt(s.icon, 40, 36, 24, "#0d9488")}
+        <text x="22" y="80" fill="#64748b" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="700" letter-spacing="1.4">${label.toUpperCase()}</text>
+        <text x="22" y="98" fill="#111827" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700">${escapeSvg(valTrim)}</text>
       </g>`;
   }).join("");
 
   const heroTag = hero
-    ? `<g>
-         <rect x="490" y="210" width="280" height="280" rx="16" fill="#ffffff" fill-opacity="0.04"/>
-         <image x="510" y="230" width="240" height="240" href="${hero}" preserveAspectRatio="xMidYMid meet"/>
-       </g>`
+    ? `<image x="280" y="100" width="240" height="200" href="${hero}" preserveAspectRatio="xMidYMid meet"/>`
     : "";
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0b1220"/>
-      <stop offset="1" stop-color="#1a2332"/>
-    </linearGradient>
-    <linearGradient id="accentLine" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#0d9488"/>
-      <stop offset="1" stop-color="#14b8a6" stop-opacity="0"/>
-    </linearGradient>
-  </defs>
-  <rect width="800" height="600" fill="url(#bg)"/>
-  <text x="40" y="60" fill="#0d9488" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="800" letter-spacing="4">${brand.toUpperCase()}</text>
-  <text x="40" y="110" fill="#f1f5f9" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="800">Key Specifications</text>
-  <text x="40" y="140" fill="#94a3b8" font-family="Inter, Arial, sans-serif" font-size="13">${nameShort}</text>
-  <rect x="40" y="156" width="200" height="3" rx="2" fill="url(#accentLine)"/>
-  ${tiles}
+  <rect width="800" height="600" fill="#ffffff"/>
+  <text x="400" y="60" text-anchor="middle" fill="#111827" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="700">Key Features</text>
+  <text x="400" y="88" text-anchor="middle" fill="#6b7280" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="500">${nameShort}</text>
   ${heroTag}
-  <text x="40" y="578" fill="#475569" font-family="Inter, Arial, sans-serif" font-size="10" font-weight="600" letter-spacing="3">MAPLE · VERIFIED SPECIFICATIONS</text>
+  ${tiles}
 </svg>`;
 }
 
 function generateAngleSvg(product) {
   const hero = readImageAsBase64(product.image);
-  const brand = escapeSvg(product.brand || "");
   const name = escapeSvg(product.name || "");
-  const nameShort = name.length > 44 ? name.slice(0, 42) + "…" : name;
+  const nameShort = name.length > 58 ? name.slice(0, 56) + "…" : name;
   const features = CATEGORY_FEATURES[product.category] || CATEGORY_FEATURES["Laptops"];
 
+  // Apple-style: centered hero at top, two-column feature list below on clean white bg
+  const tileW = 340, tileH = 90, gapX = 20, gapY = 14;
+  const gridTopY = 330;
+  const gridStartX = (800 - (2 * tileW + gapX)) / 2;
   const rows = features.slice(0, 6).map(([ico, text], i) => {
-    const y = 200 + i * 48;
+    const col = i % 2, row = Math.floor(i / 2);
+    const x = gridStartX + col * (tileW + gapX);
+    const y = gridTopY + row * (tileH + gapY);
     return `
-      <g transform="translate(40,${y})">
-        <circle cx="22" cy="0" r="18" fill="#0d9488" fill-opacity="0.16"/>
-        ${iconSvgAt(ico, 22, 0, 22, "#2dd4bf")}
-        <text x="58" y="6" fill="#e2e8f0" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="500">${escapeSvg(text)}</text>
+      <g transform="translate(${x},${y})">
+        <rect width="${tileW}" height="${tileH}" rx="14" fill="#f7f8fa" stroke="#e5e7eb" stroke-width="1"/>
+        <circle cx="50" cy="${tileH / 2}" r="24" fill="#0d9488" fill-opacity="0.1"/>
+        ${iconSvgAt(ico, 50, tileH / 2, 26, "#0d9488")}
+        <text x="92" y="${tileH / 2 + 6}" fill="#111827" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="600">${escapeSvg(text)}</text>
       </g>`;
   }).join("");
 
   const heroTag = hero
-    ? `<g>
-         <rect x="430" y="170" width="330" height="330" rx="18" fill="#ffffff" fill-opacity="0.05"/>
-         <image x="450" y="190" width="290" height="290" href="${hero}" preserveAspectRatio="xMidYMid meet"/>
-       </g>`
+    ? `<image x="280" y="90" width="240" height="200" href="${hero}" preserveAspectRatio="xMidYMid meet"/>`
     : "";
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
-  <defs>
-    <linearGradient id="bg2" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#0b1220"/>
-      <stop offset="1" stop-color="#1a2332"/>
-    </linearGradient>
-    <linearGradient id="pillLine" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#0d9488"/>
-      <stop offset="1" stop-color="#14b8a6" stop-opacity="0"/>
-    </linearGradient>
-  </defs>
-  <rect width="800" height="600" fill="url(#bg2)"/>
-  <text x="40" y="60" fill="#0d9488" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="800" letter-spacing="4">${brand.toUpperCase()}</text>
-  <text x="40" y="110" fill="#f1f5f9" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="800">Features Overview</text>
-  <text x="40" y="140" fill="#94a3b8" font-family="Inter, Arial, sans-serif" font-size="13">${nameShort}</text>
-  <rect x="40" y="156" width="200" height="3" rx="2" fill="url(#pillLine)"/>
-  ${rows}
+  <rect width="800" height="600" fill="#ffffff"/>
+  <text x="400" y="60" text-anchor="middle" fill="#111827" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="700">What's in the Box</text>
+  <text x="400" y="88" text-anchor="middle" fill="#6b7280" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="500">${nameShort}</text>
   ${heroTag}
-  <text x="40" y="578" fill="#475569" font-family="Inter, Arial, sans-serif" font-size="10" font-weight="600" letter-spacing="3">MAPLE · HIGHLIGHTS</text>
+  ${rows}
 </svg>`;
 }
 
