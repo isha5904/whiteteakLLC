@@ -2,11 +2,27 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { URL } = require("url");
-const Database = require("better-sqlite3");
 const crypto = require("crypto");
+
+let Database;
+try {
+  Database = require("better-sqlite3");
+} catch (e) {
+  console.error("[init] better-sqlite3 failed to load:", e.message);
+  // Fallback: try node:sqlite (available on Node 22.5+ with --experimental-sqlite)
+  try {
+    const nodeSqlite = require("node:sqlite");
+    Database = nodeSqlite.DatabaseSync;
+  } catch (e2) {
+    console.error("[init] node:sqlite also unavailable:", e2.message);
+  }
+}
+
 const { createDataLayer, verifyPassword, hashPassword } = require("./data-layer");
 const { sendOtpEmail } = require("./mailer");
-const productsV2 = require("./data/products-v2.json");
+
+let productsV2 = [];
+try { productsV2 = require("./data/products-v2.json"); } catch { productsV2 = []; }
 
 const PORT = process.env.PORT || 3000;
 const IS_VERCEL = Boolean(process.env.VERCEL);
@@ -16,12 +32,19 @@ const DATA_DIR = IS_VERCEL ? "/tmp" : path.join(ROOT, "data");
 const DB_PATH = path.join(DATA_DIR, "store.db");
 const MONGODB_URI = process.env.MONGODB_URI || "";
 
-if (!IS_VERCEL) {
-  fs.mkdirSync(PUBLIC_DIR, { recursive: true });
+try {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-}
+  if (!IS_VERCEL) fs.mkdirSync(PUBLIC_DIR, { recursive: true });
+} catch (e) { console.warn("[init] mkdir:", e.message); }
 
-const db = new Database(DB_PATH);
+let db;
+try {
+  db = new Database(DB_PATH);
+} catch (e) {
+  console.error("[init] Database creation failed:", e.message);
+  // Create in-memory DB as last resort
+  db = new Database(":memory:");
+}
 let dataLayer;
 db.exec(`
   CREATE TABLE IF NOT EXISTS products (
@@ -4312,7 +4335,7 @@ function countWords(s) {
   return String(s || "").trim().split(/\s+/).filter(Boolean).length;
 }
 
-const server = http.createServer(async (req, res) => {
+async function handleRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const pathname = decodeURIComponent(url.pathname);
   const currentUser = await getCurrentUser(req);
@@ -5236,7 +5259,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   html(res, 404, notFoundPage(currentUser));
-});
+}
+
+const server = http.createServer(handleRequest);
 
 let _initPromise = null;
 async function ensureInit() {
@@ -5249,7 +5274,7 @@ async function ensureInit() {
 // Vercel serverless handler export
 module.exports = async (req, res) => {
   await ensureInit();
-  server.emit("request", req, res);
+  return handleRequest(req, res);
 };
 
 // Local dev: start listening on a port
