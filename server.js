@@ -32,21 +32,33 @@ const DATA_DIR = IS_VERCEL ? "/tmp" : path.join(ROOT, "data");
 const DB_PATH = path.join(DATA_DIR, "store.db");
 const MONGODB_URI = process.env.MONGODB_URI || "";
 
-try {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  if (!IS_VERCEL) fs.mkdirSync(PUBLIC_DIR, { recursive: true });
-} catch (e) { console.warn("[init] mkdir:", e.message); }
-
 let db;
-try {
-  db = new Database(DB_PATH);
-} catch (e) {
-  console.error("[init] Database creation failed:", e.message);
-  // Create in-memory DB as last resort
-  db = new Database(":memory:");
-}
 let dataLayer;
-db.exec(`
+let _initStarted = false;
+let _initPromise = null;
+
+function initialize() {
+  if (_initPromise) return _initPromise;
+  _initPromise = (async () => {
+    if (!Database) throw new Error("No SQLite driver available (better-sqlite3 failed to load)");
+    try {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      if (!IS_VERCEL) fs.mkdirSync(PUBLIC_DIR, { recursive: true });
+    } catch (e) { console.warn("[init] mkdir:", e.message); }
+    try {
+      db = new Database(DB_PATH);
+    } catch (e) {
+      console.warn("[init] file DB failed, using :memory:", e.message);
+      db = new Database(":memory:");
+    }
+    runSchemaAndSeed();
+    dataLayer = await createDataLayer(db, MONGODB_URI);
+  })();
+  return _initPromise;
+}
+
+function runSchemaAndSeed() {
+  db.exec(`
   CREATE TABLE IF NOT EXISTS products (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     slug TEXT UNIQUE NOT NULL,
@@ -139,8 +151,9 @@ db.exec(`
   );
 `);
 
-seedProductsIfNeeded();
-fixProductCategoryImageMismatch();
+  seedProductsIfNeeded();
+  fixProductCategoryImageMismatch();
+}
 
 function ensureProductColumn(columnName, sqlType) {
   const columns = db.prepare("PRAGMA table_info(products)").all();
@@ -5261,25 +5274,33 @@ async function handleRequest(req, res) {
   html(res, 404, notFoundPage(currentUser));
 }
 
-const server = http.createServer(handleRequest);
-
-let _initPromise = null;
-async function ensureInit() {
-  if (!_initPromise) {
-    _initPromise = createDataLayer(db, MONGODB_URI).then((dl) => { dataLayer = dl; });
+const server = http.createServer(async (req, res) => {
+  try { await initialize(); } catch (e) {
+    res.writeHead(500, { "Content-Type": "text/plain" });
+    res.end("Init failed: " + (e.message || "unknown"));
+    return;
   }
-  return _initPromise;
-}
+  return handleRequest(req, res);
+});
 
 // Vercel serverless handler export
 module.exports = async (req, res) => {
-  await ensureInit();
+  try {
+    await initialize();
+  } catch (e) {
+    console.error("[vercel] init failed:", e);
+    if (!res.headersSent) {
+      res.writeHead(500, { "Content-Type": "text/plain" });
+      res.end("Init failed: " + (e.message || "unknown"));
+    }
+    return;
+  }
   return handleRequest(req, res);
 };
 
 // Local dev: start listening on a port
 if (!IS_VERCEL) {
-  ensureInit().then(() => {
+  initialize().then(() => {
     server.listen(PORT, () => {
       console.log(`MAPLE running at http://localhost:${PORT}`);
     });
