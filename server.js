@@ -2,23 +2,26 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { URL } = require("url");
-const { DatabaseSync } = require("node:sqlite");
+const Database = require("better-sqlite3");
 const crypto = require("crypto");
 const { createDataLayer, verifyPassword, hashPassword } = require("./data-layer");
 const { sendOtpEmail } = require("./mailer");
 const productsV2 = require("./data/products-v2.json");
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
+const IS_VERCEL = Boolean(process.env.VERCEL);
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, "public");
-const DATA_DIR = path.join(ROOT, "data");
+const DATA_DIR = IS_VERCEL ? "/tmp" : path.join(ROOT, "data");
 const DB_PATH = path.join(DATA_DIR, "store.db");
 const MONGODB_URI = process.env.MONGODB_URI || "";
 
-fs.mkdirSync(PUBLIC_DIR, { recursive: true });
-fs.mkdirSync(DATA_DIR, { recursive: true });
+if (!IS_VERCEL) {
+  fs.mkdirSync(PUBLIC_DIR, { recursive: true });
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
 
-const db = new DatabaseSync(DB_PATH);
+const db = new Database(DB_PATH);
 let dataLayer;
 db.exec(`
   CREATE TABLE IF NOT EXISTS products (
@@ -5235,14 +5238,28 @@ const server = http.createServer(async (req, res) => {
   html(res, 404, notFoundPage(currentUser));
 });
 
-async function start() {
-  dataLayer = await createDataLayer(db, MONGODB_URI);
-  server.listen(PORT, () => {
-    console.log(`MAPLE running at http://localhost:${PORT}`);
-  });
+let _initPromise = null;
+async function ensureInit() {
+  if (!_initPromise) {
+    _initPromise = createDataLayer(db, MONGODB_URI).then((dl) => { dataLayer = dl; });
+  }
+  return _initPromise;
 }
 
-start().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+// Vercel serverless handler export
+module.exports = async (req, res) => {
+  await ensureInit();
+  server.emit("request", req, res);
+};
+
+// Local dev: start listening on a port
+if (!IS_VERCEL) {
+  ensureInit().then(() => {
+    server.listen(PORT, () => {
+      console.log(`MAPLE running at http://localhost:${PORT}`);
+    });
+  }).catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

@@ -1,5 +1,4 @@
 const crypto = require("crypto");
-const { DatabaseSync } = require("node:sqlite");
 let MongoClient;
 
 try {
