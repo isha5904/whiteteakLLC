@@ -4,19 +4,8 @@ const path = require("path");
 const { URL } = require("url");
 const crypto = require("crypto");
 
-let Database;
-try {
-  Database = require("better-sqlite3");
-} catch (e) {
-  console.error("[init] better-sqlite3 failed to load:", e.message);
-  // Fallback: try node:sqlite (available on Node 22.5+ with --experimental-sqlite)
-  try {
-    const nodeSqlite = require("node:sqlite");
-    Database = nodeSqlite.DatabaseSync;
-  } catch (e2) {
-    console.error("[init] node:sqlite also unavailable:", e2.message);
-  }
-}
+// Pure-JS SQLite via sql.js — zero native deps, works on any platform (Vercel/AWS/etc.)
+const { openDatabase } = require("./db-shim");
 
 const { createDataLayer, verifyPassword, hashPassword } = require("./data-layer");
 const { sendOtpEmail } = require("./mailer");
@@ -40,18 +29,20 @@ let _initPromise = null;
 function initialize() {
   if (_initPromise) return _initPromise;
   _initPromise = (async () => {
-    if (!Database) throw new Error("No SQLite driver available (better-sqlite3 failed to load)");
     try {
       fs.mkdirSync(DATA_DIR, { recursive: true });
       if (!IS_VERCEL) fs.mkdirSync(PUBLIC_DIR, { recursive: true });
     } catch (e) { console.warn("[init] mkdir:", e.message); }
+    // On Vercel the filesystem is ephemeral; DB is in-memory per cold-start.
+    // Locally we persist to data/store.db.
     try {
-      db = new Database(DB_PATH);
+      db = await openDatabase(IS_VERCEL ? null : DB_PATH);
     } catch (e) {
-      console.warn("[init] file DB failed, using :memory:", e.message);
-      db = new Database(":memory:");
+      console.warn("[init] openDatabase failed, using in-memory:", e.message);
+      db = await openDatabase(null);
     }
     runSchemaAndSeed();
+    if (!IS_VERCEL && db.save) db.save();
     dataLayer = await createDataLayer(db, MONGODB_URI);
   })();
   return _initPromise;
