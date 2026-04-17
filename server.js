@@ -205,8 +205,10 @@ function buildSeedProducts() {
   return buildOverhaulSeedProducts();
 }
 
-// Task 6: ensure each product's images use ONLY its own single matching photo (same image 3×)
-// so gallery thumbnails never show unrelated items.
+// Task 6: ensure each product's gallery uses ONLY its own matching photo (same image 3×).
+// We only have 30 unique stock photos per category for 30 products, so showing different
+// photos as "angles of the same product" would be misleading. Until real product
+// photography is available, we duplicate the product's own image across all 3 slots.
 function fixProductCategoryImageMismatch() {
   try {
     const rows = db.prepare("SELECT id, category, images_json, image FROM products ORDER BY id").all();
@@ -221,10 +223,8 @@ function fixProductCategoryImageMismatch() {
       const src = `/public/assets/products-v3/${catSlug}/${catSlug}-${String(n).padStart(2, "0")}.jpg`;
       let imgs = [];
       try { imgs = JSON.parse(row.images_json || "[]"); } catch { imgs = []; }
-      const detailImg = `/public/assets/products-v3/${catSlug}/${catSlug}-detail.jpg`;
-      const lifestyleImg = `/public/assets/products-v3/${catSlug}/${catSlug}-lifestyle.jpg`;
-      const expectedImgs = [src, detailImg, lifestyleImg];
-      const needsFix = imgs.length !== 3 || imgs[0] !== src || imgs[1] !== detailImg || imgs[2] !== lifestyleImg;
+      const expectedImgs = [src, src, src];
+      const needsFix = imgs.length !== 3 || imgs.some((img) => img !== src);
       if (needsFix) {
         update.run(JSON.stringify(expectedImgs), src, row.id);
       }
@@ -451,10 +451,12 @@ function buildSeedProductsLegacy_UNUSED() {
 function buildOverhaulSeedProducts() {
   const IMG = (cat, n) => `/public/assets/products-v3/${cat}/${cat}-${String(n).padStart(2, "0")}.jpg`;
   // Each product uses its own single matching image, repeated for the 3 gallery slots.
-  // This guarantees that all gallery thumbnails show the same product photo (no cross-variant mismatches).
+  // We only have 30 unique Unsplash shots per category; showing different shots as
+  // "angles" of the SAME product would be misleading — they're different products.
+  // Until real product photography is available, we duplicate the product's own image.
   const images3 = (cat, n) => {
     const src = IMG(cat, n);
-    return [src, `/public/assets/products-v3/${cat}/${cat}-detail.jpg`, `/public/assets/products-v3/${cat}/${cat}-lifestyle.jpg`];
+    return [src, src, src];
   };
   const rating = (i) => Number((3.6 + ((i * 37) % 14) * 0.1).toFixed(1));
   const reviews = (i) => 50 + ((i * 131) % 9450);
