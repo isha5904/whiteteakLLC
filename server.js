@@ -2083,8 +2083,8 @@ function renderCromaFooter() {
         </div>
       </div>
       <div class="cr-footer-bottom">
-        <span>© 2026 MAPLE Core Inc. All rights reserved.</span>
-        <span>Made in India</span>
+        <span>© 2026 SynapseEngine OÜ. All rights reserved.</span>
+        <span>Operating the MAPLE brand · Made in India</span>
       </div>
     </footer>
   `;
@@ -3422,7 +3422,7 @@ function checkoutPage(user = null) {
             <label class="cr-co-pay-option"><input type="radio" name="pay" value="wise"><span>Wise (Bank Transfer)</span></label>
             <div class="mp-wise-box" data-mp-wise hidden>
               <p><strong>Wise bank transfer instructions</strong></p>
-              <p>Account name: MAPLE CORE INC<br>Wise email: payments@maple.com<br>Reference: your email on file</p>
+              <p>Account name: SynapseEngine OÜ<br>Wise email: payments@maple.com<br>Reference: your email on file</p>
             </div>
             <div class="cr-co-actions">
               <button type="button" class="cr-co-back" data-cr-back>Back</button>
@@ -4210,10 +4210,11 @@ function termsPage(user = null) {
     user,
     content: `
       <main class="mp-page">
-        <section class="mp-page-hero"><h1>Terms &amp; Conditions</h1><p>Last updated: April 2026. Please read these terms carefully before using MAPLE.</p></section>
+        <section class="mp-page-hero"><h1>Terms &amp; Conditions</h1><p>Last updated: April 2026. Please read these terms carefully before using MAPLE, operated by SynapseEngine OÜ.</p></section>
         <section class="mp-prose">
+          <p><strong>Company:</strong> SynapseEngine OÜ (the "Company", "we", "us"), the legal entity operating the MAPLE brand and all related Services.</p>
           <h2>1. Acceptance of Terms</h2>
-          <p>By accessing or using the MAPLE website, mobile interfaces, or any services we provide (collectively, "the Services"), you agree to be bound by these Terms &amp; Conditions and our Privacy Policy. If you do not accept these terms in full, please do not use the Services. We may update these terms from time to time; continued use after a change constitutes acceptance of the revised terms.</p>
+          <p>By accessing or using the MAPLE website, mobile interfaces, or any services we provide (collectively, "the Services"), you agree to be bound by these Terms &amp; Conditions and our Privacy Policy. If you do not accept these terms in full, please do not use the Services. SynapseEngine OÜ may update these terms from time to time; continued use after a change constitutes acceptance of the revised terms.</p>
           <h2>2. Eligibility</h2>
           <p>You must be at least 18 years of age and capable of forming a legally binding contract under Indian law to register an account and place orders. By using MAPLE you represent that the information you provide is accurate and that you are purchasing for personal, non-commercial use unless otherwise agreed in writing.</p>
           <h2>3. Account</h2>
@@ -4225,9 +4226,9 @@ function termsPage(user = null) {
           <h2>6. Returns</h2>
           <p>Eligible products may be returned within 30 days of delivery in unused, original condition with all accessories and packaging. Certain categories — opened software, hygiene-sensitive earbuds, and customised items — are excluded. Refer to our Refund &amp; Returns policy for full details.</p>
           <h2>7. Intellectual Property</h2>
-          <p>All text, graphics, logos, product imagery, and software on MAPLE are owned by or licensed to MAPLE Core Inc. and protected under Indian and international copyright and trademark law. You may not reproduce, scrape, or redistribute any part of the Services without our prior written consent.</p>
+          <p>All text, graphics, logos, product imagery, and software on MAPLE are owned by or licensed to SynapseEngine OÜ and protected under Estonian, Indian, and international copyright and trademark law. You may not reproduce, scrape, or redistribute any part of the Services without the prior written consent of SynapseEngine OÜ.</p>
           <h2>8. Limitation of Liability</h2>
-          <p>To the maximum extent permitted by law, MAPLE's aggregate liability arising out of or relating to the Services shall not exceed the amount paid by you for the specific order in question. We disclaim liability for indirect, incidental, or consequential damages, including loss of data or profits, except where such limitation is prohibited by law.</p>
+          <p>To the maximum extent permitted by law, SynapseEngine OÜ's aggregate liability arising out of or relating to the Services shall not exceed the amount paid by you for the specific order in question. We disclaim liability for indirect, incidental, or consequential damages, including loss of data or profits, except where such limitation is prohibited by law.</p>
           <h2>9. Governing Law</h2>
           <p>These terms are governed by the laws of the Republic of India. Any dispute shall be subject to the exclusive jurisdiction of the competent courts at Bengaluru, Karnataka. Where permitted, parties agree to attempt good-faith mediation before initiating litigation.</p>
           <h2>10. Contact</h2>
