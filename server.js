@@ -181,6 +181,12 @@ function seedProductsIfNeeded() {
   `);
 
   for (const product of products) {
+    // Substitute slug-based SVG placeholders for gallery slots 2 & 3
+    const resolvedImages = (product.images || []).map((img) =>
+      img === "__SPEC_SVG__" ? `/asset/spec/${product.slug}.svg`
+        : img === "__ANGLE_SVG__" ? `/asset/angle/${product.slug}.svg`
+        : img
+    );
     insert.run(
       product.slug,
       product.name,
@@ -191,8 +197,8 @@ function seedProductsIfNeeded() {
       product.rating,
       product.reviews,
       product.stock,
-      product.images[0],
-      JSON.stringify(product.images),
+      resolvedImages[0],
+      JSON.stringify(resolvedImages),
       product.badge,
       product.description,
       JSON.stringify(product.specs),
@@ -211,7 +217,7 @@ function buildSeedProducts() {
 // photography is available, we duplicate the product's own image across all 3 slots.
 function fixProductCategoryImageMismatch() {
   try {
-    const rows = db.prepare("SELECT id, category, images_json, image FROM products ORDER BY id").all();
+    const rows = db.prepare("SELECT id, slug, category, images_json, image FROM products ORDER BY id").all();
     const slugMap = { "Laptops": "laptops", "Mobiles": "mobiles", "Headphones": "headphones", "Mouse": "mouse" };
     const update = db.prepare("UPDATE products SET images_json = ?, image = ? WHERE id = ?");
     const perCatCounter = {};
@@ -221,10 +227,12 @@ function fixProductCategoryImageMismatch() {
       perCatCounter[catSlug] = (perCatCounter[catSlug] || 0) + 1;
       const n = ((perCatCounter[catSlug] - 1) % 30) + 1;
       const src = `/public/assets/products-v3/${catSlug}/${catSlug}-${String(n).padStart(2, "0")}.jpg`;
+      const specUrl = `/asset/spec/${row.slug}.svg`;
+      const angleUrl = `/asset/angle/${row.slug}.svg`;
+      const expectedImgs = [src, specUrl, angleUrl];
       let imgs = [];
       try { imgs = JSON.parse(row.images_json || "[]"); } catch { imgs = []; }
-      const expectedImgs = [src, src, src];
-      const needsFix = imgs.length !== 3 || imgs.some((img) => img !== src);
+      const needsFix = imgs.length !== 3 || imgs[0] !== src || imgs[1] !== specUrl || imgs[2] !== angleUrl;
       if (needsFix) {
         update.run(JSON.stringify(expectedImgs), src, row.id);
       }
@@ -450,13 +458,14 @@ function buildSeedProductsLegacy_UNUSED() {
 
 function buildOverhaulSeedProducts() {
   const IMG = (cat, n) => `/public/assets/products-v3/${cat}/${cat}-${String(n).padStart(2, "0")}.jpg`;
-  // Each product uses its own single matching image, repeated for the 3 gallery slots.
-  // We only have 30 unique Unsplash shots per category; showing different shots as
-  // "angles" of the SAME product would be misleading — they're different products.
-  // Until real product photography is available, we duplicate the product's own image.
+  // Gallery slots:
+  //   [0] = the product's own hero photo (Croma-style main image)
+  //   [1] = generated spec infographic SVG (key features card with the same product embedded)
+  //   [2] = generated angled/stylized view SVG (product on gradient background)
+  // Slug-based URLs are resolved at seed-insert time; we substitute the slug below.
   const images3 = (cat, n) => {
     const src = IMG(cat, n);
-    return [src, src, src];
+    return [src, "__SPEC_SVG__", "__ANGLE_SVG__"];
   };
   const rating = (i) => Number((3.6 + ((i * 37) % 14) * 0.1).toFixed(1));
   const reviews = (i) => 50 + ((i * 131) % 9450);
@@ -796,6 +805,110 @@ function normalizeProduct(product) {
     memory,
     familyKey
   };
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SVG-based product gallery images (spec infographic + angled view)
+//  Loaded via <img> with embedded base64 — survives same-origin restrictions
+// ═══════════════════════════════════════════════════════════════
+const _imgBase64Cache = new Map();
+function readImageAsBase64(relUrl) {
+  if (_imgBase64Cache.has(relUrl)) return _imgBase64Cache.get(relUrl);
+  try {
+    const fsPath = path.join(ROOT, relUrl.replace(/^\//, ""));
+    const buf = fs.readFileSync(fsPath);
+    const ext = path.extname(fsPath).slice(1).toLowerCase();
+    const mime = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+    const out = `data:${mime};base64,${buf.toString("base64")}`;
+    _imgBase64Cache.set(relUrl, out);
+    return out;
+  } catch {
+    _imgBase64Cache.set(relUrl, "");
+    return "";
+  }
+}
+
+function escapeSvg(s) {
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function generateSpecSvg(product) {
+  const hero = readImageAsBase64(product.image);
+  const specs = (product.specs || []).slice(0, 6);
+  const brand = escapeSvg(product.brand || "");
+  const name = escapeSvg(product.name || "");
+  const nameShort = name.length > 48 ? name.slice(0, 46) + "…" : name;
+  const tileW = 235, tileH = 78, tileGap = 15;
+  const cols = 2;
+  const startX = 40, startY = 380;
+  const tiles = specs.map((spec, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = startX + col * (tileW + tileGap);
+    const y = startY + row * (tileH + tileGap);
+    const label = escapeSvg(spec.slice(0, 34));
+    const labelText = spec.length > 34 ? label + "…" : label;
+    return `
+      <g transform="translate(${x},${y})">
+        <rect width="${tileW}" height="${tileH}" rx="12" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+        <circle cx="32" cy="${tileH / 2}" r="18" fill="#0d9488" opacity="0.2"/>
+        <circle cx="32" cy="${tileH / 2}" r="10" fill="#0d9488"/>
+        <text x="64" y="${tileH / 2 + 5}" fill="#e2e8f0" font-family="Arial, sans-serif" font-size="13" font-weight="500">${labelText}</text>
+      </g>`;
+  }).join("");
+  const heroTag = hero
+    ? `<image x="540" y="120" width="220" height="220" href="${hero}" preserveAspectRatio="xMidYMid meet"/>`
+    : "";
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#1e293b"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#bg)"/>
+  <text x="40" y="60" fill="#64748b" font-family="Arial, sans-serif" font-size="13" font-weight="700" letter-spacing="3">${brand.toUpperCase()}</text>
+  <text x="40" y="110" fill="#f1f5f9" font-family="Arial, sans-serif" font-size="24" font-weight="700">KEY FEATURES</text>
+  <text x="40" y="145" fill="#94a3b8" font-family="Arial, sans-serif" font-size="14">${nameShort}</text>
+  <line x1="40" y1="165" x2="760" y2="165" stroke="#334155" stroke-width="1"/>
+  ${heroTag}
+  ${tiles}
+  <text x="400" y="585" text-anchor="middle" fill="#64748b" font-family="Arial, sans-serif" font-size="11" letter-spacing="2">MAPLE · VERIFIED SPECS</text>
+</svg>`;
+}
+
+function generateAngleSvg(product) {
+  const hero = readImageAsBase64(product.image);
+  const brand = escapeSvg(product.brand || "");
+  const name = escapeSvg(product.name || "");
+  const nameShort = name.length > 46 ? name.slice(0, 44) + "…" : name;
+  const heroTag = hero
+    ? `<g transform="translate(800,0) scale(-1,1)"><image x="100" y="90" width="600" height="400" href="${hero}" preserveAspectRatio="xMidYMid meet"/></g>`
+    : "";
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <defs>
+    <radialGradient id="bg2" cx="0.5" cy="0.4" r="0.9">
+      <stop offset="0" stop-color="#1e293b"/>
+      <stop offset="1" stop-color="#0f172a"/>
+    </radialGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="25" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="800" height="600" fill="url(#bg2)"/>
+  <ellipse cx="400" cy="530" rx="260" ry="16" fill="#0d9488" opacity="0.15" filter="url(#glow)"/>
+  ${heroTag}
+  <text x="400" y="550" text-anchor="middle" fill="#64748b" font-family="Arial, sans-serif" font-size="11" letter-spacing="3">${brand.toUpperCase()}</text>
+  <text x="400" y="575" text-anchor="middle" fill="#e2e8f0" font-family="Arial, sans-serif" font-size="14" font-weight="600">${nameShort}</text>
+</svg>`;
 }
 
 function extractColorLabel(name) {
@@ -5336,6 +5449,26 @@ async function handleRequest(req, res) {
       json(res, 200, { ok: true });
       return;
     } catch (e) { json(res, 400, { error: e.message }); return; }
+  }
+
+  // SVG product gallery: spec infographic + stylized angle
+  if (req.method === "GET" && pathname.startsWith("/asset/spec/") && pathname.endsWith(".svg")) {
+    const slug = pathname.slice("/asset/spec/".length, -4);
+    const row = db.prepare("SELECT * FROM products WHERE slug = ?").get(slug);
+    if (!row) { res.writeHead(404); res.end(); return; }
+    const svg = generateSpecSvg(normalizeProduct(row));
+    res.writeHead(200, { "Content-Type": "image/svg+xml; charset=utf-8", "Cache-Control": "public, max-age=86400, immutable" });
+    res.end(svg);
+    return;
+  }
+  if (req.method === "GET" && pathname.startsWith("/asset/angle/") && pathname.endsWith(".svg")) {
+    const slug = pathname.slice("/asset/angle/".length, -4);
+    const row = db.prepare("SELECT * FROM products WHERE slug = ?").get(slug);
+    if (!row) { res.writeHead(404); res.end(); return; }
+    const svg = generateAngleSvg(normalizeProduct(row));
+    res.writeHead(200, { "Content-Type": "image/svg+xml; charset=utf-8", "Cache-Control": "public, max-age=86400, immutable" });
+    res.end(svg);
+    return;
   }
 
   html(res, 404, notFoundPage(currentUser));
