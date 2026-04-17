@@ -2,4 +2,3 @@ node_modules/
 data/store.db
 server.err
 server.log
-.env
