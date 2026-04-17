@@ -941,11 +941,69 @@ function parseCookies(req) {
   }, {});
 }
 
+// HMAC-signed stateless token — survives Vercel cold starts (no DB lookup needed)
+const AUTH_SECRET = process.env.AUTH_SECRET || process.env.ADMIN_PASSWORD || "maple-default-secret-change-me";
+function signAuthToken(payload) {
+  const data = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const sig = crypto.createHmac("sha256", AUTH_SECRET).update(data).digest("base64url");
+  return `${data}.${sig}`;
+}
+function verifyAuthToken(token) {
+  if (!token || typeof token !== "string") return null;
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [data, sig] = parts;
+  const expected = crypto.createHmac("sha256", AUTH_SECRET).update(data).digest("base64url");
+  let ok = false;
+  try {
+    ok = crypto.timingSafeEqual(Buffer.from(sig, "base64url"), Buffer.from(expected, "base64url"));
+  } catch { ok = false; }
+  if (!ok) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(data, "base64url").toString());
+    if (payload.exp && Date.now() > payload.exp) return null;
+    return payload;
+  } catch { return null; }
+}
+
 async function getCurrentUser(req) {
   const cookies = parseCookies(req);
+  // 1) Stateless signed cookie (works on serverless / cold starts)
+  if (cookies.mp_auth) {
+    const payload = verifyAuthToken(cookies.mp_auth);
+    if (payload && payload.email) {
+      // Admin via env creds → return synthetic admin user without DB lookup
+      if (payload.role === "admin" || payload.email === ADMIN_SYNTHETIC_EMAIL) {
+        return { name: ADMIN_USERNAME || "Admin", email: ADMIN_SYNTHETIC_EMAIL, verified: 1 };
+      }
+      // Regular user → try DB lookup, fall back to payload
+      if (dataLayer) {
+        try {
+          const user = await dataLayer.getUserByEmail(payload.email);
+          if (user) return user;
+        } catch { /* fall through */ }
+      }
+      return { name: payload.name || payload.email, email: payload.email, verified: 1 };
+    }
+  }
+  // 2) Legacy DB session fallback
   if (!cookies.session_token || !dataLayer) return null;
-  const session = await dataLayer.getSession(cookies.session_token);
-  return session?.user || null;
+  try {
+    const session = await dataLayer.getSession(cookies.session_token);
+    return session?.user || null;
+  } catch { return null; }
+}
+
+function appendCookie(res, cookieStr) {
+  const existing = res.getHeader("Set-Cookie");
+  if (!existing) res.setHeader("Set-Cookie", cookieStr);
+  else if (Array.isArray(existing)) res.setHeader("Set-Cookie", existing.concat(cookieStr));
+  else res.setHeader("Set-Cookie", [existing, cookieStr]);
+}
+function setAuthCookie(res, payload, maxAgeMs = 1000 * 60 * 60 * 24 * 30) {
+  const token = signAuthToken({ ...payload, iat: Date.now(), exp: Date.now() + maxAgeMs });
+  const expires = new Date(Date.now() + maxAgeMs).toUTCString();
+  appendCookie(res, `mp_auth=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Expires=${expires}`);
 }
 
 function getRequestContext(req) {
@@ -959,11 +1017,15 @@ function getRequestContext(req) {
 }
 
 function setSessionCookie(res, token, expiresAt) {
-  res.setHeader("Set-Cookie", `session_token=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Expires=${new Date(expiresAt).toUTCString()}`);
+  appendCookie(res, `session_token=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Expires=${new Date(expiresAt).toUTCString()}`);
 }
 
 function clearSessionCookie(res) {
-  res.setHeader("Set-Cookie", "session_token=; Path=/; HttpOnly; SameSite=Lax; Expires=Thu, 01 Jan 1970 00:00:00 GMT");
+  const expired = "Expires=Thu, 01 Jan 1970 00:00:00 GMT";
+  res.setHeader("Set-Cookie", [
+    `session_token=; Path=/; HttpOnly; SameSite=Lax; ${expired}`,
+    `mp_auth=; Path=/; HttpOnly; SameSite=Lax; ${expired}`
+  ]);
 }
 
 function isAdmin(user) {
@@ -4428,15 +4490,17 @@ async function handleRequest(req, res) {
     const username = String(body.username || "").trim();
     const password = String(body.password || "");
     if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+      // Stateless signed cookie — works on serverless without DB persistence
+      setAuthCookie(res, { email: ADMIN_SYNTHETIC_EMAIL, name: ADMIN_USERNAME, role: "admin" });
       try {
         let adminUser = await dataLayer.getUserByEmail(ADMIN_SYNTHETIC_EMAIL);
         if (!adminUser) {
           adminUser = await dataLayer.createUser({ name: ADMIN_USERNAME, email: ADMIN_SYNTHETIC_EMAIL, password: ADMIN_PASSWORD });
         }
         await dataLayer.markUserVerified(ADMIN_SYNTHETIC_EMAIL);
-      } catch (_err) { /* ignore */ }
-      const session = await dataLayer.createSession(ADMIN_SYNTHETIC_EMAIL);
-      setSessionCookie(res, session.token, session.expiresAt);
+        const session = await dataLayer.createSession(ADMIN_SYNTHETIC_EMAIL);
+        if (session) setSessionCookie(res, session.token, session.expiresAt);
+      } catch (_err) { /* ignore — signed cookie is sufficient */ }
       res.writeHead(302, { Location: "/admin" });
       res.end();
       return;
@@ -4582,8 +4646,11 @@ async function handleRequest(req, res) {
       res.end();
       return;
     }
-    const session = await dataLayer.createSession(email);
-    setSessionCookie(res, session.token, session.expiresAt);
+    setAuthCookie(res, { email, name: user.name, role: "user" });
+    try {
+      const session = await dataLayer.createSession(email);
+      if (session) setSessionCookie(res, session.token, session.expiresAt);
+    } catch { /* signed cookie is sufficient */ }
     const hasAddr = Boolean((parseCookies(req) || {}).mp_addr);
     let dest = safeNext || "/account";
     if (!hasAddr) dest += (dest.indexOf("?") === -1 ? "?" : "&") + "prompt_addr=1";
@@ -4812,15 +4879,16 @@ async function handleRequest(req, res) {
 
     // Hardcoded admin login (username-based)
     if (mode === "login" && identifier === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+      setAuthCookie(res, { email: ADMIN_SYNTHETIC_EMAIL, name: ADMIN_USERNAME, role: "admin" });
       try {
         let adminUser = await dataLayer.getUserByEmail(ADMIN_SYNTHETIC_EMAIL);
         if (!adminUser) {
           adminUser = await dataLayer.createUser({ name: ADMIN_USERNAME, email: ADMIN_SYNTHETIC_EMAIL, password: ADMIN_PASSWORD });
         }
         await dataLayer.markUserVerified(ADMIN_SYNTHETIC_EMAIL);
-      } catch (_err) { /* ignore */ }
-      const session = await dataLayer.createSession(ADMIN_SYNTHETIC_EMAIL);
-      setSessionCookie(res, session.token, session.expiresAt);
+        const session = await dataLayer.createSession(ADMIN_SYNTHETIC_EMAIL);
+        if (session) setSessionCookie(res, session.token, session.expiresAt);
+      } catch (_err) { /* signed cookie is sufficient */ }
       res.writeHead(302, { Location: "/admin" });
       res.end();
       return;
@@ -4910,8 +4978,12 @@ async function handleRequest(req, res) {
     }
 
     await dataLayer.markUserVerified(email);
-    const session = await dataLayer.createSession(email);
-    setSessionCookie(res, session.token, session.expiresAt);
+    const verifiedUser = await dataLayer.getUserByEmail(email);
+    setAuthCookie(res, { email, name: (verifiedUser && verifiedUser.name) || email, role: "user" });
+    try {
+      const session = await dataLayer.createSession(email);
+      if (session) setSessionCookie(res, session.token, session.expiresAt);
+    } catch { /* signed cookie is sufficient */ }
     const hasAddr = Boolean((parseCookies(req) || {}).mp_addr);
     res.writeHead(302, { Location: hasAddr ? "/account" : "/account?prompt_addr=1" });
     res.end();
