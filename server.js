@@ -837,49 +837,121 @@ function escapeSvg(s) {
     .replace(/'/g, "&apos;");
 }
 
+// SVG icons (24x24 viewbox) for each spec category
+const SPEC_ICONS = {
+  display: '<rect x="4" y="5" width="16" height="11" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 20h4 M12 16v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+  cpu: '<rect x="6" y="6" width="12" height="12" rx="1" fill="currentColor" fill-opacity="0.18" stroke="currentColor" stroke-width="1.8"/><rect x="9" y="9" width="6" height="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3 9h3 M3 12h3 M3 15h3 M18 9h3 M18 12h3 M18 15h3 M9 3v3 M12 3v3 M15 3v3 M9 18v3 M12 18v3 M15 18v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+  ram: '<rect x="2.5" y="7" width="19" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 10v4 M11 10v4 M15 10v4 M19 10v4" stroke="currentColor" stroke-width="1.5"/><rect x="5" y="11" width="1.2" height="2" fill="currentColor"/><rect x="17.5" y="11" width="1.2" height="2" fill="currentColor"/>',
+  storage: '<path d="M4 7c0-1.5 3.5-3 8-3s8 1.5 8 3M4 7v10c0 1.5 3.5 3 8 3s8-1.5 8-3V7M4 12c0 1.5 3.5 3 8 3s8-1.5 8-3" fill="none" stroke="currentColor" stroke-width="1.8"/>',
+  os: '<rect x="3.5" y="3.5" width="7.5" height="7.5" fill="currentColor" fill-opacity="0.55"/><rect x="13" y="3.5" width="7.5" height="7.5" fill="currentColor" fill-opacity="0.55"/><rect x="3.5" y="13" width="7.5" height="7.5" fill="currentColor" fill-opacity="0.55"/><rect x="13" y="13" width="7.5" height="7.5" fill="currentColor" fill-opacity="0.55"/>',
+  gpu: '<rect x="2.5" y="7" width="19" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="8" cy="12" r="2.6" fill="currentColor" fill-opacity="0.3" stroke="currentColor" stroke-width="1.5"/><circle cx="15.5" cy="12" r="2.6" fill="currentColor" fill-opacity="0.3" stroke="currentColor" stroke-width="1.5"/>',
+  camera: '<path d="M5 8h3l1.3-2h5.4L16 8h3a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 5 8z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="13.5" r="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/>',
+  battery: '<rect x="2.5" y="8" width="17" height="8" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="4.5" y="10" width="9" height="4" rx="0.3" fill="currentColor" fill-opacity="0.6"/><rect x="20" y="10" width="2" height="4" rx="0.3" fill="currentColor"/>',
+  wireless: '<path d="M3 10a13 13 0 0 1 18 0 M6 13a8 8 0 0 1 12 0 M9 16a4 4 0 0 1 6 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="19" r="1.3" fill="currentColor"/>',
+  wired: '<path d="M12 3v4 M8 7h8v4a4 4 0 0 1-8 0V7z M10 4v3 M14 4v3 M12 15v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+  dpi: '<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="5" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.6"/><circle cx="12" cy="12" r="2" fill="currentColor"/>',
+  buttons: '<path d="M9 3h6a5 5 0 0 1 5 5v8a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5z M12 3v8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>',
+  network: '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 12h18 M12 3a14 14 0 0 1 0 18 M12 3a14 14 0 0 0 0 18" fill="none" stroke="currentColor" stroke-width="1.5"/>',
+  check: '<circle cx="12" cy="12" r="9" fill="currentColor" fill-opacity="0.18" stroke="currentColor" stroke-width="1.8"/><path d="M7.5 12.5l3 3 6-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
+  keyboard: '<rect x="2.5" y="7" width="19" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6 10h.01 M9 10h.01 M12 10h.01 M15 10h.01 M18 10h.01 M7 14h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+  bolt: '<path d="M13 3L5 13h6l-2 8 8-10h-6z" fill="currentColor" fill-opacity="0.4" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>',
+  audio: '<path d="M12 4a8 8 0 0 0-8 8v3h3v-3a5 5 0 0 1 10 0v3h3v-3a8 8 0 0 0-8-8z M4 15h3v4a1 1 0 0 1-1 1H4zM20 15v5h-2a1 1 0 0 1-1-1v-4z" fill="currentColor" fill-opacity="0.35" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
+  shield: '<path d="M12 3L4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+};
+
+// Parse a spec string and return { icon, label, value } for nicer presentation
+function categorizeSpec(spec) {
+  const s = String(spec || "").trim();
+  const l = s.toLowerCase();
+  if (/display|screen|inch|retina|oled|amoled|lcd|fhd|qhd|uhd|hdr|touch/.test(l)) return { icon: "display", label: "Display", value: s };
+  if (/processor|chip|snapdragon|ryzen|intel core|apple m\d|exynos|mediatek|dimensity|core i\d|cpu/.test(l)) return { icon: "cpu", label: "Processor", value: s };
+  if (/ram|memory|ddr/.test(l)) return { icon: "ram", label: "Memory", value: s };
+  if (/ssd|hdd|emmc|nvme|\bstorage\b|gb storage|tb storage|internal storage|\d+gb$/.test(l)) return { icon: "storage", label: "Storage", value: s };
+  if (/windows|macos|chromeos|android|ios|operating system|\bos\b/.test(l)) return { icon: "os", label: "OS", value: s };
+  if (/graphics|radeon|geforce|iris|\bgpu\b|integrated graphics/.test(l)) return { icon: "gpu", label: "Graphics", value: s };
+  if (/camera|\dmp\b|megapixel|webcam/.test(l)) return { icon: "camera", label: "Camera", value: s };
+  if (/battery|mah|wh battery|hours/.test(l)) return { icon: "battery", label: "Battery", value: s };
+  if (/5g|4g|lte|wi[- ]?fi|wifi|ethernet|band/.test(l)) return { icon: "network", label: "Connectivity", value: s };
+  if (/wireless|bluetooth/.test(l)) return { icon: "wireless", label: "Connection", value: s };
+  if (/wired|usb[- ]?c|type[- ]?c|cable/.test(l)) return { icon: "wired", label: "Connection", value: s };
+  if (/dpi/.test(l)) return { icon: "dpi", label: "Sensor", value: s };
+  if (/button|click/.test(l)) return { icon: "buttons", label: "Controls", value: s };
+  if (/fast charg|super charg|turbo charg|\bw\b|watt/.test(l)) return { icon: "bolt", label: "Charging", value: s };
+  if (/driver|anc|noise cancel|bass|hi[- ]?res audio/.test(l)) return { icon: "audio", label: "Audio", value: s };
+  if (/water|ip\d\d|dust|splash|rug/.test(l)) return { icon: "shield", label: "Protection", value: s };
+  if (/keyboard|backlit/.test(l)) return { icon: "keyboard", label: "Keyboard", value: s };
+  return { icon: "check", label: "Feature", value: s };
+}
+
+// Category-specific "Features Overview" list used in the angle/features SVG
+const CATEGORY_FEATURES = {
+  "Laptops":    [ ["keyboard", "Backlit Keyboard"], ["camera", "HD Webcam"], ["network", "Wi-Fi 6 Ready"], ["bolt", "Fast Charging"], ["shield", "Premium Aluminium Build"], ["wired", "USB Type-C Ports"] ],
+  "Mobiles":    [ ["network", "5G Network Ready"], ["camera", "Multi-Lens AI Camera"], ["bolt", "Fast Charging"], ["display", "High Refresh Display"], ["shield", "Premium Glass Back"], ["check", "In-Display Fingerprint"] ],
+  "Headphones": [ ["audio", "Active Noise Cancel"], ["battery", "30+ Hour Battery Life"], ["wireless", "Bluetooth Multipoint"], ["check", "Touch Controls"], ["shield", "Premium Drivers"], ["check", "Built-in Voice Assistant"] ],
+  "Mouse":      [ ["dpi", "High-Precision Sensor"], ["buttons", "Programmable Buttons"], ["shield", "Ergonomic Design"], ["battery", "Long Battery Life"], ["check", "Adjustable DPI"], ["check", "Plug & Play Setup"] ]
+};
+
+function iconSvgAt(name, cx, cy, size, color) {
+  const body = SPEC_ICONS[name] || SPEC_ICONS.check;
+  const s = size / 24;
+  return `<g transform="translate(${cx - size / 2},${cy - size / 2}) scale(${s})" style="color:${color}">${body}</g>`;
+}
+
 function generateSpecSvg(product) {
   const hero = readImageAsBase64(product.image);
-  const specs = (product.specs || []).slice(0, 6);
+  const rawSpecs = (product.specs || []).slice(0, 6);
+  const specs = rawSpecs.map(categorizeSpec);
   const brand = escapeSvg(product.brand || "");
   const name = escapeSvg(product.name || "");
-  const nameShort = name.length > 48 ? name.slice(0, 46) + "…" : name;
-  const tileW = 235, tileH = 78, tileGap = 15;
-  const cols = 2;
-  const startX = 40, startY = 380;
-  const tiles = specs.map((spec, i) => {
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    const x = startX + col * (tileW + tileGap);
-    const y = startY + row * (tileH + tileGap);
-    const label = escapeSvg(spec.slice(0, 34));
-    const labelText = spec.length > 34 ? label + "…" : label;
+  const nameShort = name.length > 52 ? name.slice(0, 50) + "…" : name;
+
+  // 2-column × up to 3-row grid of spec tiles on the left; product image on the right
+  const tileW = 215, tileH = 80, gapX = 14, gapY = 14;
+  const gridX = 40, gridY = 190;
+  const tiles = specs.map((s, i) => {
+    const col = i % 2, row = Math.floor(i / 2);
+    const x = gridX + col * (tileW + gapX);
+    const y = gridY + row * (tileH + gapY);
+    const label = escapeSvg(s.label);
+    const rawVal = s.value.replace(new RegExp(`^${s.label}\\s*:?\\s*`, "i"), "");
+    const valTrim = rawVal.length > 26 ? rawVal.slice(0, 24) + "…" : rawVal;
     return `
       <g transform="translate(${x},${y})">
-        <rect width="${tileW}" height="${tileH}" rx="12" fill="#1e293b" stroke="#334155" stroke-width="1"/>
-        <circle cx="32" cy="${tileH / 2}" r="18" fill="#0d9488" opacity="0.2"/>
-        <circle cx="32" cy="${tileH / 2}" r="10" fill="#0d9488"/>
-        <text x="64" y="${tileH / 2 + 5}" fill="#e2e8f0" font-family="Arial, sans-serif" font-size="13" font-weight="500">${labelText}</text>
+        <rect width="${tileW}" height="${tileH}" rx="14" fill="#1a2332" stroke="#2a3b55" stroke-width="1"/>
+        <circle cx="34" cy="${tileH / 2}" r="22" fill="#0d9488" fill-opacity="0.15"/>
+        ${iconSvgAt(s.icon, 34, tileH / 2, 24, "#2dd4bf")}
+        <text x="66" y="${tileH / 2 - 6}" fill="#94a3b8" font-family="Inter, Arial, sans-serif" font-size="11" font-weight="600" letter-spacing="1.2">${label.toUpperCase()}</text>
+        <text x="66" y="${tileH / 2 + 14}" fill="#f1f5f9" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="600">${escapeSvg(valTrim)}</text>
       </g>`;
   }).join("");
+
   const heroTag = hero
-    ? `<image x="540" y="120" width="220" height="220" href="${hero}" preserveAspectRatio="xMidYMid meet"/>`
+    ? `<g>
+         <rect x="490" y="210" width="280" height="280" rx="16" fill="#ffffff" fill-opacity="0.04"/>
+         <image x="510" y="230" width="240" height="240" href="${hero}" preserveAspectRatio="xMidYMid meet"/>
+       </g>`
     : "";
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#0f172a"/>
-      <stop offset="1" stop-color="#1e293b"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1220"/>
+      <stop offset="1" stop-color="#1a2332"/>
+    </linearGradient>
+    <linearGradient id="accentLine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0d9488"/>
+      <stop offset="1" stop-color="#14b8a6" stop-opacity="0"/>
     </linearGradient>
   </defs>
   <rect width="800" height="600" fill="url(#bg)"/>
-  <text x="40" y="60" fill="#64748b" font-family="Arial, sans-serif" font-size="13" font-weight="700" letter-spacing="3">${brand.toUpperCase()}</text>
-  <text x="40" y="110" fill="#f1f5f9" font-family="Arial, sans-serif" font-size="24" font-weight="700">KEY FEATURES</text>
-  <text x="40" y="145" fill="#94a3b8" font-family="Arial, sans-serif" font-size="14">${nameShort}</text>
-  <line x1="40" y1="165" x2="760" y2="165" stroke="#334155" stroke-width="1"/>
-  ${heroTag}
+  <text x="40" y="60" fill="#0d9488" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="800" letter-spacing="4">${brand.toUpperCase()}</text>
+  <text x="40" y="110" fill="#f1f5f9" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="800">Key Specifications</text>
+  <text x="40" y="140" fill="#94a3b8" font-family="Inter, Arial, sans-serif" font-size="13">${nameShort}</text>
+  <rect x="40" y="156" width="200" height="3" rx="2" fill="url(#accentLine)"/>
   ${tiles}
-  <text x="400" y="585" text-anchor="middle" fill="#64748b" font-family="Arial, sans-serif" font-size="11" letter-spacing="2">MAPLE · VERIFIED SPECS</text>
+  ${heroTag}
+  <text x="40" y="578" fill="#475569" font-family="Inter, Arial, sans-serif" font-size="10" font-weight="600" letter-spacing="3">MAPLE · VERIFIED SPECIFICATIONS</text>
 </svg>`;
 }
 
@@ -887,27 +959,46 @@ function generateAngleSvg(product) {
   const hero = readImageAsBase64(product.image);
   const brand = escapeSvg(product.brand || "");
   const name = escapeSvg(product.name || "");
-  const nameShort = name.length > 46 ? name.slice(0, 44) + "…" : name;
+  const nameShort = name.length > 44 ? name.slice(0, 42) + "…" : name;
+  const features = CATEGORY_FEATURES[product.category] || CATEGORY_FEATURES["Laptops"];
+
+  const rows = features.slice(0, 6).map(([ico, text], i) => {
+    const y = 200 + i * 48;
+    return `
+      <g transform="translate(40,${y})">
+        <circle cx="22" cy="0" r="18" fill="#0d9488" fill-opacity="0.16"/>
+        ${iconSvgAt(ico, 22, 0, 22, "#2dd4bf")}
+        <text x="58" y="6" fill="#e2e8f0" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="500">${escapeSvg(text)}</text>
+      </g>`;
+  }).join("");
+
   const heroTag = hero
-    ? `<g transform="translate(800,0) scale(-1,1)"><image x="100" y="90" width="600" height="400" href="${hero}" preserveAspectRatio="xMidYMid meet"/></g>`
+    ? `<g>
+         <rect x="430" y="170" width="330" height="330" rx="18" fill="#ffffff" fill-opacity="0.05"/>
+         <image x="450" y="190" width="290" height="290" href="${hero}" preserveAspectRatio="xMidYMid meet"/>
+       </g>`
     : "";
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
   <defs>
-    <radialGradient id="bg2" cx="0.5" cy="0.4" r="0.9">
-      <stop offset="0" stop-color="#1e293b"/>
-      <stop offset="1" stop-color="#0f172a"/>
-    </radialGradient>
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="25" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
+    <linearGradient id="bg2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1220"/>
+      <stop offset="1" stop-color="#1a2332"/>
+    </linearGradient>
+    <linearGradient id="pillLine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0d9488"/>
+      <stop offset="1" stop-color="#14b8a6" stop-opacity="0"/>
+    </linearGradient>
   </defs>
   <rect width="800" height="600" fill="url(#bg2)"/>
-  <ellipse cx="400" cy="530" rx="260" ry="16" fill="#0d9488" opacity="0.15" filter="url(#glow)"/>
+  <text x="40" y="60" fill="#0d9488" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="800" letter-spacing="4">${brand.toUpperCase()}</text>
+  <text x="40" y="110" fill="#f1f5f9" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="800">Features Overview</text>
+  <text x="40" y="140" fill="#94a3b8" font-family="Inter, Arial, sans-serif" font-size="13">${nameShort}</text>
+  <rect x="40" y="156" width="200" height="3" rx="2" fill="url(#pillLine)"/>
+  ${rows}
   ${heroTag}
-  <text x="400" y="550" text-anchor="middle" fill="#64748b" font-family="Arial, sans-serif" font-size="11" letter-spacing="3">${brand.toUpperCase()}</text>
-  <text x="400" y="575" text-anchor="middle" fill="#e2e8f0" font-family="Arial, sans-serif" font-size="14" font-weight="600">${nameShort}</text>
+  <text x="40" y="578" fill="#475569" font-family="Inter, Arial, sans-serif" font-size="10" font-weight="600" letter-spacing="3">MAPLE · HIGHLIGHTS</text>
 </svg>`;
 }
 
