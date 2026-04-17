@@ -4341,8 +4341,10 @@ function parseMultipart(buf, boundary) {
   return { fields, files };
 }
 
-const UPLOADS_DIR = path.join(PUBLIC_DIR, "assets", "uploads");
-fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+const UPLOADS_DIR = IS_VERCEL
+  ? path.join("/tmp", "uploads")
+  : path.join(PUBLIC_DIR, "assets", "uploads");
+try { fs.mkdirSync(UPLOADS_DIR, { recursive: true }); } catch (e) { console.warn("[init] uploads dir:", e.message); }
 
 function countWords(s) {
   return String(s || "").trim().split(/\s+/).filter(Boolean).length;
