@@ -225,8 +225,9 @@ function fixProductCategoryImageMismatch() {
       const catSlug = slugMap[row.category];
       if (!catSlug) return;
       perCatCounter[catSlug] = (perCatCounter[catSlug] || 0) + 1;
+      const customImg = row.image && row.image.startsWith("/public/assets/products-custom/") ? row.image : null;
       const n = ((perCatCounter[catSlug] - 1) % 30) + 1;
-      const src = `/public/assets/products-v3/${catSlug}/${catSlug}-${String(n).padStart(2, "0")}.jpg`;
+      const src = customImg || `/public/assets/products-v3/${catSlug}/${catSlug}-${String(n).padStart(2, "0")}.jpg`;
       const specUrl = `/asset/spec/${row.slug}.svg`;
       const angleUrl = `/asset/angle/${row.slug}.svg`;
       const expectedImgs = [src, specUrl, angleUrl];
@@ -458,11 +459,8 @@ function buildSeedProductsLegacy_UNUSED() {
 
 function buildOverhaulSeedProducts() {
   const IMG = (cat, n) => `/public/assets/products-v3/${cat}/${cat}-${String(n).padStart(2, "0")}.jpg`;
-  // Gallery slots:
-  //   [0] = the product's own hero photo (Croma-style main image)
-  //   [1] = generated spec infographic SVG (key features card with the same product embedded)
-  //   [2] = generated angled/stylized view SVG (product on gradient background)
-  // Slug-based URLs are resolved at seed-insert time; we substitute the slug below.
+  // Gallery: slot 0 = hero photo, slot 1 = spec SVG (key features), slot 2 = angle SVG.
+  // Slug-based URLs are substituted at seed-insert time.
   const images3 = (cat, n) => {
     const src = IMG(cat, n);
     return [src, "__SPEC_SVG__", "__ANGLE_SVG__"];
@@ -818,7 +816,12 @@ function readImageAsBase64(relUrl) {
     const fsPath = path.join(ROOT, relUrl.replace(/^\//, ""));
     const buf = fs.readFileSync(fsPath);
     const ext = path.extname(fsPath).slice(1).toLowerCase();
-    const mime = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+    const mime = ext === "png" ? "image/png"
+      : ext === "webp" ? "image/webp"
+      : ext === "avif" ? "image/avif"
+      : ext === "gif" ? "image/gif"
+      : ext === "svg" ? "image/svg+xml"
+      : "image/jpeg";
     const out = `data:${mime};base64,${buf.toString("base64")}`;
     _imgBase64Cache.set(relUrl, out);
     return out;
@@ -883,14 +886,6 @@ function categorizeSpec(spec) {
   return { icon: "check", label: "Feature", value: s };
 }
 
-// Category-specific "Features Overview" list used in the angle/features SVG
-const CATEGORY_FEATURES = {
-  "Laptops":    [ ["keyboard", "Backlit Keyboard"], ["camera", "HD Webcam"], ["network", "Wi-Fi 6 Ready"], ["bolt", "Fast Charging"], ["shield", "Premium Aluminium Build"], ["wired", "USB Type-C Ports"] ],
-  "Mobiles":    [ ["network", "5G Network Ready"], ["camera", "Multi-Lens AI Camera"], ["bolt", "Fast Charging"], ["display", "High Refresh Display"], ["shield", "Premium Glass Back"], ["check", "In-Display Fingerprint"] ],
-  "Headphones": [ ["audio", "Active Noise Cancel"], ["battery", "30+ Hour Battery Life"], ["wireless", "Bluetooth Multipoint"], ["check", "Touch Controls"], ["shield", "Premium Drivers"], ["check", "Built-in Voice Assistant"] ],
-  "Mouse":      [ ["dpi", "High-Precision Sensor"], ["buttons", "Programmable Buttons"], ["shield", "Ergonomic Design"], ["battery", "Long Battery Life"], ["check", "Adjustable DPI"], ["check", "Plug & Play Setup"] ]
-};
-
 function iconSvgAt(name, cx, cy, size, color) {
   const body = SPEC_ICONS[name] || SPEC_ICONS.check;
   const s = size / 24;
@@ -938,6 +933,14 @@ function generateSpecSvg(product) {
   ${tiles}
 </svg>`;
 }
+
+// Category-specific "Features Overview" list used in the angle/features SVG
+const CATEGORY_FEATURES = {
+  "Laptops":    [ ["keyboard", "Backlit Keyboard"], ["camera", "HD Webcam"], ["network", "Wi-Fi 6 Ready"], ["bolt", "Fast Charging"], ["shield", "Premium Aluminium Build"], ["wired", "USB Type-C Ports"] ],
+  "Mobiles":    [ ["network", "5G Network Ready"], ["camera", "Multi-Lens AI Camera"], ["bolt", "Fast Charging"], ["display", "High Refresh Display"], ["shield", "Premium Glass Back"], ["check", "In-Display Fingerprint"] ],
+  "Headphones": [ ["audio", "Active Noise Cancel"], ["battery", "30+ Hour Battery Life"], ["wireless", "Bluetooth Multipoint"], ["check", "Touch Controls"], ["shield", "Premium Drivers"], ["check", "Built-in Voice Assistant"] ],
+  "Mouse":      [ ["dpi", "High-Precision Sensor"], ["buttons", "Programmable Buttons"], ["shield", "Ergonomic Design"], ["battery", "Long Battery Life"], ["check", "Adjustable DPI"], ["check", "Plug & Play Setup"] ]
+};
 
 function generateAngleSvg(product) {
   const hero = readImageAsBase64(product.image);
@@ -1054,6 +1057,10 @@ function layout({ title, description = "", currentPath = "/", content, user = nu
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
     ${meta || ""}
+    <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
+    <link rel="apple-touch-icon" href="/public/favicon.svg">
+    <link rel="mask-icon" href="/public/favicon.svg" color="#0d9488">
+    <meta name="theme-color" content="#0d9488">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -1065,7 +1072,8 @@ function layout({ title, description = "", currentPath = "/", content, user = nu
         <a class="brand mp-brand" href="/">
           <span class="mp-brand-mark" aria-hidden="true">M</span><span class="brand-word">MAPLE</span>
         </a>
-        <a class="menu-link" href="/products">☰ <span>Menu</span></a>
+        <button type="button" class="menu-link mp-nav-toggle" data-mp-nav-toggle aria-label="Open menu" aria-expanded="false">☰ <span>Menu</span></button>
+        <nav class="main-nav mp-header-nav">${nav(currentPath)}</nav>
         <div class="header-tools">
           <form class="search-inline" action="/products" method="GET">
             <input type="search" name="q" placeholder="What are you looking for ?">
@@ -1074,13 +1082,41 @@ function layout({ title, description = "", currentPath = "/", content, user = nu
             <button type="button" class="mp-addr-btn" data-mp-addr-open aria-label="Set delivery location">${addrLabel}</button>
             ${user
               ? `<a class="account-link" href="/account">${escapeHtml(user.name.split(" ")[0])}</a>
-                 <form action="/auth/logout" method="POST" class="mp-logout-form"><button class="mp-logout-btn" type="submit">Logout</button></form>`
+                 <form action="/auth/logout" method="POST" class="mp-logout-form" onsubmit="return confirm('Are you sure you want to log out?')"><button class="mp-logout-btn" type="submit">Logout</button></form>`
               : `<a class="account-link" href="/login">👤 Sign in</a>`}
             ${user ? `<a class="mp-wish-link" href="/wishlist" aria-label="Wishlist">♥ <span data-wish-count>${(() => { try { return db.prepare("SELECT COUNT(*) AS c FROM wishlists WHERE user_email=?").get(user.email).c; } catch { return 0; } })()}</span></a>` : ""}
             <a class="cart-pill" href="/cart">🛒 <span data-cart-count>0</span></a>
           </div>
         </div>
       </header>
+      <aside class="mp-nav-drawer" data-mp-nav-drawer hidden>
+        <div class="mp-nav-backdrop" data-mp-nav-close></div>
+        <div class="mp-nav-panel" role="dialog" aria-label="Navigation menu">
+          <div class="mp-nav-head">
+            <span class="mp-nav-title">Menu</span>
+            <button type="button" class="mp-nav-close" data-mp-nav-close aria-label="Close menu">×</button>
+          </div>
+          <nav class="mp-nav-body">
+            <a href="/">Home</a>
+            <a href="/products">All Products</a>
+            <div class="mp-nav-section">Categories</div>
+            <a href="/category/laptops">Laptops</a>
+            <a href="/category/mobiles">Mobiles</a>
+            <a href="/category/headphones">Headphones</a>
+            <a href="/category/mouse">Mouse</a>
+            <div class="mp-nav-section">Account</div>
+            ${user
+              ? `<a href="/account">My Account</a>
+                 <a href="/orders">Orders</a>
+                 <a href="/wishlist">Wishlist</a>
+                 <a href="/cart">Cart</a>
+                 <form method="POST" action="/auth/logout" onsubmit="return confirm('Are you sure you want to log out?')"><button type="submit" class="mp-nav-logout">Logout</button></form>`
+              : `<a href="/login">Sign in</a>
+                 <a href="/signup">Create account</a>
+                 <a href="/cart">Cart</a>`}
+          </nav>
+        </div>
+      </aside>
       <dialog class="mp-addr-dialog" data-mp-addr-dialog>
         <form method="dialog" class="mp-addr-form" data-mp-addr-form>
           <h3>Choose delivery location</h3>
@@ -1098,7 +1134,6 @@ function layout({ title, description = "", currentPath = "/", content, user = nu
           </div>
         </form>
       </dialog>
-      <div class="sub-nav"><nav class="main-nav">${nav(currentPath)}</nav></div>
       <div class="category-rail">
         ${getCategories().map((item) => `<a href="/category/${slugify(item.category)}">${escapeHtml(item.category)}</a>`).join("")}
       </div>
@@ -3664,7 +3699,7 @@ function accountPage(user) {
             <p class="eyebrow">My account</p>
             <h1 class="page-title">Welcome, ${escapeHtml(user.name)}</h1>
           </div>
-          <form method="POST" action="/auth/logout">
+          <form method="POST" action="/auth/logout" onsubmit="return confirm('Are you sure you want to log out?')">
             <button class="ghost-button" type="submit">Logout</button>
           </form>
         </div>
@@ -3960,7 +3995,7 @@ function adminPage(user = null, opts = {}) {
           <button class="mp-theme-swatch" data-mp-theme-swatch="carbon" style="background:#a3a3a3" title="Carbon"></button>
         </div>
       </div>
-      <form method="POST" action="/admin/logout">
+      <form method="POST" action="/admin/logout" onsubmit="return confirm('Are you sure you want to log out of the admin panel?')">
         <button class="cr-admin-danger" type="submit">Logout</button>
       </form>
     </section>
@@ -4592,6 +4627,12 @@ async function handleRequest(req, res) {
 
   if (pathname.startsWith("/public/")) {
     serveStatic(res, path.join(PUBLIC_DIR, pathname.replace("/public/", "")));
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/favicon.ico") {
+    res.writeHead(302, { Location: "/public/favicon.svg" });
+    res.end();
     return;
   }
 

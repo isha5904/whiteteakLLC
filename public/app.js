@@ -1,4 +1,38 @@
 (function () {
+  // Mobile/Tablet hamburger drawer
+  function initNavDrawer() {
+    var toggle = document.querySelector("[data-mp-nav-toggle]");
+    var drawer = document.querySelector("[data-mp-nav-drawer]");
+    if (!toggle || !drawer) return;
+    function open() {
+      drawer.hidden = false;
+      toggle.setAttribute("aria-expanded", "true");
+      document.body.classList.add("mp-nav-open");
+    }
+    function close() {
+      drawer.hidden = true;
+      toggle.setAttribute("aria-expanded", "false");
+      document.body.classList.remove("mp-nav-open");
+    }
+    toggle.addEventListener("click", function () {
+      if (drawer.hidden) open(); else close();
+    });
+    drawer.querySelectorAll("[data-mp-nav-close]").forEach(function (el) {
+      el.addEventListener("click", close);
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !drawer.hidden) close();
+    });
+    drawer.querySelectorAll(".mp-nav-body a").forEach(function (el) {
+      el.addEventListener("click", close);
+    });
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initNavDrawer);
+  } else {
+    initNavDrawer();
+  }
+
   const CART_KEY = "electrohub-cart";
 
   function readCart() {
