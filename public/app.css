@@ -2434,6 +2434,58 @@ h1.page-title { margin: 0; font-size: clamp(1.8rem, 3vw, 3rem); line-height: 1.0
   width: 100%;
   color: #dc2626;
 }
+
+/* Drawer profile / auth block (sits above nav body) */
+.mp-nav-user {
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 14px;
+  row-gap: 4px;
+  align-items: center;
+}
+.mp-nav-avatar {
+  grid-row: span 2;
+  width: 46px; height: 46px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent, #0d9488), #12d6c5);
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 1.2rem;
+}
+.mp-nav-user-meta strong { font-size: 0.95rem; display: block; }
+.mp-nav-user-meta span { font-size: 0.78rem; color: var(--muted); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-nav-user-link {
+  grid-column: 1 / -1;
+  padding: 8px 0 2px;
+  font-size: 0.82rem;
+  color: var(--accent, #0d9488);
+  font-weight: 700;
+  text-decoration: none;
+}
+.mp-nav-auth {
+  padding: 18px 20px;
+  display: grid; gap: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.mp-nav-auth-primary,
+.mp-nav-auth-ghost {
+  display: block;
+  padding: 12px 16px;
+  border-radius: 10px;
+  text-align: center;
+  font-weight: 700;
+  text-decoration: none;
+  font-size: 0.92rem;
+  min-height: 44px;
+  line-height: 1.4;
+}
+.mp-nav-auth-primary { background: var(--accent, #0d9488); color: #fff; }
+.mp-nav-auth-primary:hover { background: var(--accent-hover, #0f766e); }
+.mp-nav-auth-ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+.mp-nav-auth-ghost:hover { background: var(--surface-alt); }
 body.mp-nav-open { overflow: hidden; }
 .eo-admin-products-table img.eo-admin-thumb { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; }
 .eo-admin-orders-table select { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 12.5px; background: var(--surface); color: var(--text); }
@@ -4152,8 +4204,8 @@ table { max-width: 100%; }
   .clean-thumb-row { grid-auto-flow: column; grid-auto-columns: minmax(72px, 1fr); gap: 8px; }
 }
 
-/* Tiny phones (≤ 380px) — further compression */
-@media (max-width: 380px) {
+/* Tiny phones (≤ 420px, baseline 311px) — further compression */
+@media (max-width: 420px) {
   .compact-grid,
   .product-grid,
   .deal-grid,
@@ -4161,6 +4213,47 @@ table { max-width: 100%; }
   .brand-word { font-size: 1.1rem; }
   .mp-nav-toggle { padding: 8px 10px; font-size: 0.82rem; }
   .cart-pill, .account-link { padding: 8px 10px; font-size: 0.8rem; }
+
+  /* Hero carousel on tiny screens */
+  .v2-hero { min-height: 320px; border-radius: 18px; margin: 10px 0 18px; }
+  .v2-hero-track { min-height: 320px; }
+  .v2-slide {
+    grid-template-columns: 1fr !important;
+    padding: 22px 18px;
+    gap: 8px;
+    align-content: center;
+  }
+  .v2-slide-text { max-width: 100% !important; }
+  .v2-slide-kicker { font-size: 0.68rem; padding: 3px 9px; margin-bottom: 10px; }
+  .v2-slide-title { font-size: 1.35rem; line-height: 1.15; margin: 8px 0 6px; }
+  .v2-slide-sub { font-size: 0.82rem; line-height: 1.45; margin: 0 0 14px; }
+  .v2-slide-cta { padding: 10px 18px; font-size: 0.88rem; box-shadow: 0 4px 14px rgba(0,0,0,0.2); }
+  .v2-slide-media { display: none !important; }
+  .v2-hero-arrow { width: 30px; height: 30px; font-size: 16px; }
+  .v2-hero-arrow.prev { left: 8px; }
+  .v2-hero-arrow.next { right: 8px; }
+
+  .shell { width: calc(100% - 12px); }
+  .section { padding-top: 18px; padding-bottom: 18px; }
+  .section-head h2 { font-size: 1.15rem; }
+}
+
+/* Circular hero dots — override earlier pill-shaped active rule */
+.v2-hero-dots { display: flex; gap: 8px; align-items: center; justify-content: center; }
+.v2-hero-dots .v2-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.55);
+  border: 0; padding: 0;
+  flex: 0 0 auto;
+  transition: background 200ms ease, transform 200ms ease;
+}
+.v2-hero-dots .v2-dot.is-active {
+  width: 9px !important;          /* kill the 24px pill-width from line 1931 */
+  height: 9px;
+  border-radius: 50% !important;
+  background: #fff;
+  transform: scale(1.35);
 }
 
 /* Mobile polish — tighter product cards, shorter carousel, no overflow */

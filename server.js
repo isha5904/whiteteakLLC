@@ -1105,6 +1105,19 @@ function layout({ title, description = "", currentPath = "/", content, user = nu
             <span class="mp-nav-title">Menu</span>
             <button type="button" class="mp-nav-close" data-mp-nav-close aria-label="Close menu">×</button>
           </div>
+          ${user
+            ? `<div class="mp-nav-user">
+                 <div class="mp-nav-avatar">${escapeHtml((user.name || "U").charAt(0).toUpperCase())}</div>
+                 <div class="mp-nav-user-meta">
+                   <strong>${escapeHtml(user.name || "")}</strong>
+                   <span>${escapeHtml(user.email || "")}</span>
+                 </div>
+                 <a href="/account" class="mp-nav-user-link">View profile →</a>
+               </div>`
+            : `<div class="mp-nav-auth">
+                 <a href="/login" class="mp-nav-auth-primary">Sign in</a>
+                 <a href="/signup" class="mp-nav-auth-ghost">Create account</a>
+               </div>`}
           <nav class="mp-nav-body">
             <a href="/"><span class="mp-nav-ico">⌂</span> Home</a>
             <a href="/products"><span class="mp-nav-ico">▤</span> All Products</a>
