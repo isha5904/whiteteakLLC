@@ -237,11 +237,12 @@ function fixProductCategoryImageMismatch() {
       const customImg = row.image && row.image.startsWith("/public/assets/products-custom/") ? row.image : null;
       const n = ((perCatCounter[catSlug] - 1) % 30) + 1;
       const src = customImg || `/public/assets/products-v3/${catSlug}/${catSlug}-${String(n).padStart(2, "0")}.jpg`;
+      const specUrl = `/asset/spec/${row.slug}.svg`;
       const angleUrl = `/asset/angle/${row.slug}.svg`;
-      const expectedImgs = [src, src, angleUrl];
+      const expectedImgs = [src, specUrl, angleUrl];
       let imgs = [];
       try { imgs = JSON.parse(row.images_json || "[]"); } catch { imgs = []; }
-      const needsFix = imgs.length !== 3 || imgs[0] !== src || imgs[1] !== src || imgs[2] !== angleUrl;
+      const needsFix = imgs.length !== 3 || imgs[0] !== src || imgs[1] !== specUrl || imgs[2] !== angleUrl;
       if (needsFix) {
         update.run(JSON.stringify(expectedImgs), src, row.id);
       }
