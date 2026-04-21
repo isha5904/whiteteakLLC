@@ -33,16 +33,25 @@ function initialize() {
       fs.mkdirSync(DATA_DIR, { recursive: true });
       if (!IS_VERCEL) fs.mkdirSync(PUBLIC_DIR, { recursive: true });
     } catch (e) { console.warn("[init] mkdir:", e.message); }
-    // On Vercel the filesystem is ephemeral; DB is in-memory per cold-start.
-    // Locally we persist to data/store.db.
+    // On Vercel, /tmp is the only writable path. Seed it from the committed
+    // data/store.db so the catalog (including curated product image paths)
+    // survives cold-starts instead of being rebuilt from scratch.
+    if (IS_VERCEL) {
+      const seedDb = path.join(ROOT, "data", "store.db");
+      try {
+        if (fs.existsSync(seedDb) && !fs.existsSync(DB_PATH)) {
+          fs.copyFileSync(seedDb, DB_PATH);
+        }
+      } catch (e) { console.warn("[init] seed DB copy failed:", e.message); }
+    }
     try {
-      db = await openDatabase(IS_VERCEL ? null : DB_PATH);
+      db = await openDatabase(DB_PATH);
     } catch (e) {
       console.warn("[init] openDatabase failed, using in-memory:", e.message);
       db = await openDatabase(null);
     }
     runSchemaAndSeed();
-    if (!IS_VERCEL && db.save) db.save();
+    if (db.save) db.save();
     dataLayer = await createDataLayer(db, MONGODB_URI);
   })();
   return _initPromise;
