@@ -1125,6 +1125,7 @@ function layout({ title, description = "", currentPath = "/", content, user = nu
             <a href="/"><span class="mp-nav-ico">⌂</span> Home</a>
             <a href="/products"><span class="mp-nav-ico">▤</span> All Products</a>
             <a href="/track"><span class="mp-nav-ico">⟲</span> Track Order</a>
+            <a href="/admin"><span class="mp-nav-ico">⚙</span> Admin</a>
 
             <div class="mp-nav-section">Categories</div>
             <a href="/category/laptops"><span class="mp-nav-ico">💻</span> Laptops</a>
@@ -4730,6 +4731,22 @@ async function handleRequest(req, res) {
       section: url.searchParams.get("section") || "dashboard",
       q: url.searchParams.get("q") || ""
     }));
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/admin/env-check") {
+    // Safe diagnostic: reports only whether each env var is non-empty, never the value.
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      ADMIN_USERNAME_set: Boolean(process.env.ADMIN_USERNAME),
+      ADMIN_PASSWORD_set: Boolean(process.env.ADMIN_PASSWORD),
+      AUTH_SECRET_set: Boolean(process.env.AUTH_SECRET),
+      ADMIN_SYNTHETIC_EMAIL_set: Boolean(process.env.ADMIN_SYNTHETIC_EMAIL),
+      SMTP_HOST_set: Boolean(process.env.SMTP_HOST),
+      dotenv_file_present: fs.existsSync(path.join(ROOT, ".env")),
+      IS_VERCEL,
+      root: ROOT
+    }, null, 2));
     return;
   }
 

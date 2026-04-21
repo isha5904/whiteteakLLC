@@ -4245,6 +4245,34 @@ table { max-width: 100%; }
   .section { padding-top: 18px; padding-bottom: 18px; }
   .section-head h2 { font-size: 1.15rem; }
 
+  /* Admin panel on tiny screens */
+  .cr-admin-shell { grid-template-columns: 1fr !important; }
+  .cr-admin-main { padding: 12px !important; }
+  .cr-admin-topbar {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+  .cr-admin-topbar .cr-admin-search { min-width: 0; font-size: 14px; }
+  .cr-admin-profile { gap: 6px; }
+  .cr-admin-name { display: none; }
+  .cr-admin-kpis { grid-template-columns: 1fr !important; gap: 12px; }
+  .cr-admin-kpi { padding: 14px 16px; }
+  .cr-admin-card, .cr-admin-chart-card { padding: 14px !important; border-radius: 12px; }
+  .cr-admin-card-head { flex-wrap: wrap; gap: 10px; }
+  .cr-admin-chart { height: 110px; gap: 6px; }
+  /* Admin tables scroll horizontally, not explode the page */
+  .cr-admin-card [style*="overflow-x"],
+  .cr-admin-table { min-width: 520px; font-size: 12.5px; }
+  .cr-admin-table th, .cr-admin-table td { padding: 8px 10px; }
+  .cr-admin-sidebar {
+    width: min(280px, 84vw) !important;
+    left: -100% !important;
+    background: #0f1320;
+  }
+  .cr-admin-sidebar.is-open { left: 0 !important; box-shadow: 4px 0 30px rgba(0,0,0,0.4); }
+  .cr-admin-menu { min-width: 42px; min-height: 42px; display: inline-flex !important; align-items: center; justify-content: center; }
+
   /* Product cards: single column — let each product breathe */
   .product-card { border-radius: 16px; }
   .product-card .card-media { aspect-ratio: 16 / 10; }
