@@ -4213,7 +4213,10 @@ table { max-width: 100%; }
   .compact-grid,
   .product-grid,
   .deal-grid,
-  .mini-grid { grid-template-columns: 1fr; }
+  .mini-grid,
+  .cr-list-grid,
+  .v2-grid-row,
+  .v2-grid-row-8 { grid-template-columns: 1fr !important; gap: 14px; }
   .brand-word { font-size: 1.1rem; }
   .mp-nav-toggle { padding: 8px 10px; font-size: 0.82rem; }
   .cart-pill, .account-link { padding: 8px 10px; font-size: 0.8rem; }
@@ -4241,6 +4244,42 @@ table { max-width: 100%; }
   .shell { width: calc(100% - 12px); }
   .section { padding-top: 18px; padding-bottom: 18px; }
   .section-head h2 { font-size: 1.15rem; }
+
+  /* Product cards: single column — let each product breathe */
+  .product-card { border-radius: 16px; }
+  .product-card .card-media { aspect-ratio: 16 / 10; }
+  .product-body { padding: 14px 16px 16px !important; display: flex; flex-direction: column; gap: 8px; }
+  .product-body h3 { font-size: 1rem !important; line-height: 1.3 !important; margin: 4px 0 !important; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .product-body h3 a { color: inherit; }
+  .product-brand { font-size: 0.78rem !important; color: var(--muted); margin: 0 !important; }
+  .product-card .badge { font-size: 0.72rem; padding: 3px 10px; align-self: flex-start; }
+  .product-card .variant-row { gap: 6px; flex-wrap: wrap; }
+  .product-card .variant-row span { font-size: 0.72rem; padding: 3px 8px; }
+  .product-card .rating-row { gap: 8px; }
+  .product-card .rating-chip { font-size: 0.78rem; padding: 3px 8px; }
+  .product-card .price-row strong { font-size: 1.05rem; }
+  .product-card .price-row del { font-size: 0.82rem; }
+  .product-card .stock { font-size: 0.78rem; margin: 2px 0 6px; }
+
+  /* Card actions: View details + Add to cart side by side, full width buttons */
+  .product-card .card-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    align-items: stretch;
+  }
+  .product-card .card-actions .ghost-button,
+  .product-card .card-actions .primary-button {
+    width: 100%;
+    min-width: 0;
+    padding: 10px 8px;
+    font-size: 0.82rem;
+    text-align: center;
+    white-space: nowrap;
+    min-height: 42px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 /* Circular hero dots — override earlier pill-shaped active rule */
