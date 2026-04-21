@@ -856,15 +856,22 @@
 
   /* ==== MAPLE: address dialog ==== */
   (function () {
-    var openBtn = document.querySelector("[data-mp-addr-open]");
+    var openBtns = document.querySelectorAll("[data-mp-addr-open]");
     var dialog = document.querySelector("[data-mp-addr-dialog]");
     var form = document.querySelector("[data-mp-addr-form]");
     var cancel = document.querySelector("[data-mp-addr-cancel]");
     if (!dialog || !form) return;
     function openDialog() {
+      var drawer = document.querySelector("[data-mp-nav-drawer]");
+      if (drawer && !drawer.hidden) {
+        drawer.hidden = true;
+        document.body.classList.remove("mp-nav-open");
+        var toggle = document.querySelector("[data-mp-nav-toggle]");
+        if (toggle) toggle.setAttribute("aria-expanded", "false");
+      }
       try { dialog.showModal(); } catch (_) { dialog.setAttribute("open", "open"); }
     }
-    if (openBtn) openBtn.addEventListener("click", openDialog);
+    openBtns.forEach(function (btn) { btn.addEventListener("click", openDialog); });
     if (cancel) cancel.addEventListener("click", function () { dialog.close(); });
     form.addEventListener("submit", function (e) {
       e.preventDefault();

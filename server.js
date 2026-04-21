@@ -1106,23 +1106,29 @@ function layout({ title, description = "", currentPath = "/", content, user = nu
             <button type="button" class="mp-nav-close" data-mp-nav-close aria-label="Close menu">×</button>
           </div>
           <nav class="mp-nav-body">
-            <a href="/">Home</a>
-            <a href="/products">All Products</a>
+            <a href="/"><span class="mp-nav-ico">⌂</span> Home</a>
+            <a href="/products"><span class="mp-nav-ico">▤</span> All Products</a>
+            <a href="/track"><span class="mp-nav-ico">⟲</span> Track Order</a>
+
             <div class="mp-nav-section">Categories</div>
-            <a href="/category/laptops">Laptops</a>
-            <a href="/category/mobiles">Mobiles</a>
-            <a href="/category/headphones">Headphones</a>
-            <a href="/category/mouse">Mouse</a>
+            <a href="/category/laptops"><span class="mp-nav-ico">💻</span> Laptops</a>
+            <a href="/category/mobiles"><span class="mp-nav-ico">📱</span> Mobiles</a>
+            <a href="/category/headphones"><span class="mp-nav-ico">🎧</span> Headphones</a>
+            <a href="/category/mouse"><span class="mp-nav-ico">🖱️</span> Mouse</a>
+
+            <div class="mp-nav-section">Shopping</div>
+            <a href="/cart"><span class="mp-nav-ico">🛒</span> Cart <span class="mp-nav-badge" data-cart-count>0</span></a>
+            ${user ? `<a href="/wishlist"><span class="mp-nav-ico">♥</span> Wishlist <span class="mp-nav-badge">${(() => { try { return db.prepare("SELECT COUNT(*) AS c FROM wishlists WHERE user_email=?").get(user.email).c; } catch { return 0; } })()}</span></a>` : ""}
+            ${user ? `<a href="/checkout"><span class="mp-nav-ico">✓</span> Checkout</a>` : ""}
+            <button type="button" class="mp-nav-address" data-mp-addr-open data-mp-nav-keep><span class="mp-nav-ico">📍</span> ${escapeHtml(addrLabel.replace(/^📍\s*/, "")) || "Set delivery location"}</button>
+
             <div class="mp-nav-section">Account</div>
             ${user
-              ? `<a href="/account">My Account</a>
-                 <a href="/orders">Orders</a>
-                 <a href="/wishlist">Wishlist</a>
-                 <a href="/cart">Cart</a>
+              ? `<a href="/account"><span class="mp-nav-ico">👤</span> My Account</a>
+                 <a href="/orders"><span class="mp-nav-ico">📦</span> Orders</a>
                  <form method="POST" action="/auth/logout" onsubmit="return confirm('Are you sure you want to log out?')"><button type="submit" class="mp-nav-logout">Logout</button></form>`
-              : `<a href="/login">Sign in</a>
-                 <a href="/signup">Create account</a>
-                 <a href="/cart">Cart</a>`}
+              : `<a href="/login"><span class="mp-nav-ico">→</span> Sign in</a>
+                 <a href="/signup"><span class="mp-nav-ico">＋</span> Create account</a>`}
           </nav>
         </div>
       </aside>
