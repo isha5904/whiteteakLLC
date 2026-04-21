@@ -1,3 +1,6 @@
+// Load .env before ANY const reads process.env (AUTH_SECRET, SMTP_*, etc.)
+try { require("./load-env"); } catch { /* optional — Vercel dashboard envs override */ }
+
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
