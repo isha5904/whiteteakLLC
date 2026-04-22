@@ -4205,32 +4205,47 @@ function adminPage(user = null, opts = {}) {
 function aboutPage(user = null) {
   return layout({
     title: "About Maple",
-    description: "About MAPLE — India's modern electronics destination.",
+    description: "About MAPLE — a direct-to-consumer electronics platform operated by SynapseEngine OÜ.",
     currentPath: "/about",
     user,
     content: `
       <main class="mp-page mp-about-v2">
         <section class="mp-about-grid">
           <div class="mp-about-col-text">
-            <span class="mp-eyebrow">About Maple</span>
+            <span class="mp-eyebrow">About MAPLE</span>
             <h1>Technology, made human.</h1>
-            <p class="mp-about-lede">Maple is an electronics store built for the modern Indian shopper — curated, honest, and genuinely helpful. We exist so you can spend less time decoding spec sheets and more time loving what you bought.</p>
+            <p class="mp-about-lede">MAPLE is a single-vendor, direct-to-consumer electronics platform operated by <strong>SynapseEngine OÜ</strong>. We showcase, manage, and sell our own catalogue of electronics — not a marketplace, not a reseller network — so we stay accountable for every product, price, and post-purchase interaction.</p>
 
             <h2>Our story</h2>
-            <p>Maple began in 2018 with a simple frustration: buying electronics shouldn't feel like decoding a spec sheet. Our founder, Ishika, was helping her younger sister pick a laptop for engineering college. Every site repeated the same specs — 15.6" FHD, 8GB DDR4, 512GB SSD — and none answered the one question she actually had: "Will this still feel fast two years from now?"</p>
-            <p>That evening, over chai in Koramangala, the idea for Maple took shape on a paper napkin. What if buying a laptop could feel as clear as buying a pair of running shoes — where the store helps you understand fit, purpose, and trade-offs before you look at the price?</p>
-            <p>Our first product wasn't a laptop. It was a comparison page: twelve models, three use cases, and an honest verdict for each. We shared it in three WhatsApp groups. Within a month, strangers were forwarding it. Within a quarter, customers asked us to sell the products ourselves. By 2023 we'd rebuilt the whole stack on a single thesis: every page on Maple should feel like it was designed by someone who actually shops here.</p>
+            <p>MAPLE began in 2018 with a simple frustration: buying electronics shouldn't feel like decoding a spec sheet. Our founder, Ishika, was helping her younger sister pick a laptop for engineering college. Every site repeated the same specs — 15.6" FHD, 8GB DDR4, 512GB SSD — and none answered the one question she actually had: <em>"Will this still feel fast two years from now?"</em></p>
+            <p>That evening, over chai in Koramangala, the idea for MAPLE took shape on a paper napkin. What if buying a laptop could feel as clear as buying a pair of running shoes — where the store helps you understand fit, purpose, and trade-offs before you look at the price?</p>
+            <p>Our first product wasn't a laptop. It was a comparison page: twelve models, three use cases, and an honest verdict for each. We shared it in three WhatsApp groups. Within a month, strangers were forwarding it. Within a quarter, customers asked us to sell the products ourselves. By 2023 we'd rebuilt the whole stack on a single thesis: every page on MAPLE should feel like it was designed by someone who actually shops here.</p>
+            <p>In 2025 we incorporated as <strong>SynapseEngine OÜ</strong> in Estonia to give MAPLE a transparent legal home — a stable entity that stands behind every warranty claim, refund, and data-protection request. Our merchant of record, our engineering team, and our customer-support humans all sit under that single roof.</p>
 
             <h2>Our mission</h2>
             <p>To make great technology simple to choose and delightful to own. Every product we list is verified, every price we publish is honest, and every support conversation is handled by real humans who know the catalogue.</p>
 
             <h2>What we stand for</h2>
             <ul class="mp-about-list">
+              <li><strong>Single-vendor, single standard.</strong> We own every SKU in our catalogue. No third-party sellers, no inconsistent quality — one standard applies everywhere.</li>
               <li><strong>Genuine only.</strong> We source directly from brands and authorised distributors — zero grey-market stock.</li>
-              <li><strong>Transparent pricing.</strong> One price, clearly shown, with no last-minute surprises at checkout.</li>
-              <li><strong>Real support.</strong> Our team picks up the phone, replies to email, and resolves 92% of queries on first contact.</li>
-              <li><strong>Fast, trackable delivery.</strong> Eighteen thousand pincodes and counting — most metros in 24–48 hours.</li>
+              <li><strong>Transparent pricing.</strong> Prices in INR, inclusive of GST, with no last-minute surprises at checkout.</li>
+              <li><strong>Real support.</strong> A real human on the other end of <a href="mailto:support@maple.com">support@maple.com</a> — 92% of queries resolved on first contact.</li>
+              <li><strong>Fair returns.</strong> A simple 30-day return window on eligible items, refunded to the original payment method.</li>
+              <li><strong>Secure by default.</strong> TLS in transit, hashed passwords, PCI-compliant payments via Viva Wallet — we never store raw card data.</li>
             </ul>
+
+            <h2>How to reach us</h2>
+            <ul class="mp-about-list">
+              <li><strong>Legal entity:</strong> SynapseEngine OÜ (Estonia)</li>
+              <li><strong>Registered address:</strong> Harju maakond, Tallinn, Kesklinna linnaosa, Tartu mnt 67/1-13b, 10115</li>
+              <li><strong>Customer support:</strong> <a href="mailto:support@maple.com">support@maple.com</a></li>
+              <li><strong>Admin / business:</strong> <a href="mailto:admin@MapleCoreInc.com">admin@MapleCoreInc.com</a></li>
+              <li><strong>Phone:</strong> +37257052072</li>
+              <li><strong>Governing law:</strong> India · Jurisdiction: Bengaluru, Karnataka</li>
+            </ul>
+
+            <p class="mp-about-foot">Related policies: <a href="/terms">Terms &amp; Conditions</a> · <a href="/privacy">Privacy</a> · <a href="/refund">Refund &amp; Returns</a> · <a href="/disclaimer">Disclaimer</a></p>
           </div>
           <div class="mp-about-col-media">
             <img src="/public/assets/products-v3/laptops/laptops-05.jpg" alt="Laptop lifestyle">
@@ -4251,29 +4266,116 @@ function termsPage(user = null) {
     user,
     content: `
       <main class="mp-page">
-        <section class="mp-page-hero"><h1>Terms &amp; Conditions</h1><p>Last updated: April 2026. Please read these terms carefully before using MAPLE, operated by SynapseEngine OÜ.</p></section>
+        <section class="mp-page-hero">
+          <span class="mp-eyebrow">Last updated: April 2026</span>
+          <h1>Terms &amp; Conditions</h1>
+          <p>Welcome to <strong>MAPLE</strong>, operated by <strong>SynapseEngine OÜ</strong> ("Company", "we", "us", or "our"). These Terms &amp; Conditions govern your use of our website, mobile interfaces, and services (collectively, the "Services").</p>
+        </section>
         <section class="mp-prose">
-          <p><strong>Company:</strong> SynapseEngine OÜ (the "Company", "we", "us"), the legal entity operating the MAPLE brand and all related Services.</p>
           <h2>1. Acceptance of Terms</h2>
-          <p>By accessing or using the MAPLE website, mobile interfaces, or any services we provide (collectively, "the Services"), you agree to be bound by these Terms &amp; Conditions and our Privacy Policy. If you do not accept these terms in full, please do not use the Services. SynapseEngine OÜ may update these terms from time to time; continued use after a change constitutes acceptance of the revised terms.</p>
-          <h2>2. Eligibility</h2>
-          <p>You must be at least 18 years of age and capable of forming a legally binding contract under Indian law to register an account and place orders. By using MAPLE you represent that the information you provide is accurate and that you are purchasing for personal, non-commercial use unless otherwise agreed in writing.</p>
-          <h2>3. Account</h2>
-          <p>You are responsible for maintaining the confidentiality of your login credentials and for all activities that occur under your account. Notify us immediately at support@maple.com if you suspect unauthorised access. We reserve the right to suspend or terminate accounts that appear to engage in fraud, resale, or abusive behaviour.</p>
-          <h2>4. Orders &amp; Pricing</h2>
-          <p>All orders are offers to buy, accepted by MAPLE only upon dispatch. We strive for accuracy in listings, but typographical errors in price or availability may occasionally occur; in such cases we reserve the right to cancel the order and issue a full refund. Prices are in Indian Rupees and inclusive of applicable GST unless stated otherwise.</p>
-          <h2>5. Shipping</h2>
-          <p>We deliver to eligible pincodes across India through trusted logistics partners. Estimated delivery windows are indicative and may be affected by weather, local restrictions, or courier capacity. Risk passes to you upon delivery; please inspect parcels before signing where possible.</p>
-          <h2>6. Returns</h2>
-          <p>Eligible products may be returned within 30 days of delivery in unused, original condition with all accessories and packaging. Certain categories — opened software, hygiene-sensitive earbuds, and customised items — are excluded. Refer to our Refund &amp; Returns policy for full details.</p>
-          <h2>7. Intellectual Property</h2>
-          <p>All text, graphics, logos, product imagery, and software on MAPLE are owned by or licensed to SynapseEngine OÜ and protected under Estonian, Indian, and international copyright and trademark law. You may not reproduce, scrape, or redistribute any part of the Services without the prior written consent of SynapseEngine OÜ.</p>
-          <h2>8. Limitation of Liability</h2>
-          <p>To the maximum extent permitted by law, SynapseEngine OÜ's aggregate liability arising out of or relating to the Services shall not exceed the amount paid by you for the specific order in question. We disclaim liability for indirect, incidental, or consequential damages, including loss of data or profits, except where such limitation is prohibited by law.</p>
-          <h2>9. Governing Law</h2>
-          <p>These terms are governed by the laws of the Republic of India. Any dispute shall be subject to the exclusive jurisdiction of the competent courts at Bengaluru, Karnataka. Where permitted, parties agree to attempt good-faith mediation before initiating litigation.</p>
-          <h2>10. Contact</h2>
-          <p>Questions about these terms? Write to <a href="mailto:admin@MapleCoreInc.com">admin@MapleCoreInc.com</a> or <a href="mailto:support@maple.com">support@maple.com</a>.</p>
+          <p>By accessing or using MAPLE, you agree to be bound by these Terms &amp; Conditions and our Privacy Policy. If you do not agree, please do not use our Services.</p>
+          <p>We may update these Terms at any time. Continued use after changes constitutes acceptance.</p>
+
+          <h2>2. Company Information</h2>
+          <ul>
+            <li><strong>Legal Entity:</strong> SynapseEngine OÜ</li>
+            <li><strong>Registered Country:</strong> Estonia</li>
+            <li><strong>Registered Address:</strong> Harju maakond, Tallinn, Kesklinna linnaosa, Tartu mnt 67/1-13b, 10115</li>
+            <li><strong>Phone:</strong> +37257052072</li>
+            <li><strong>Contact Email:</strong> <a href="mailto:support@maple.com">support@maple.com</a></li>
+            <li><strong>Admin Email:</strong> <a href="mailto:admin@MapleCoreInc.com">admin@MapleCoreInc.com</a></li>
+          </ul>
+
+          <h2>3. Eligibility</h2>
+          <p>You must be at least 18 years old and capable of entering a legally binding contract under applicable law. By using MAPLE, you confirm that all information provided is accurate and that you are purchasing for personal use unless agreed otherwise.</p>
+
+          <h2>4. Account Responsibility</h2>
+          <p>You are responsible for maintaining the confidentiality of your account credentials and for all activities under your account. We may suspend or terminate accounts involved in:</p>
+          <ul><li>Fraud</li><li>Policy abuse</li><li>Unauthorized resale</li></ul>
+
+          <h2>5. Products &amp; Orders</h2>
+          <ul>
+            <li>Orders are offers to purchase and are accepted only upon dispatch.</li>
+            <li>We reserve the right to cancel orders due to pricing errors, stock issues, or suspected fraud.</li>
+            <li>Cancelled orders will receive a full refund.</li>
+          </ul>
+
+          <h2>6. Pricing &amp; Taxes</h2>
+          <ul>
+            <li>Prices are listed in INR (₹).</li>
+            <li>Inclusive of applicable GST unless stated otherwise.</li>
+            <li>Prices may change without prior notice.</li>
+          </ul>
+
+          <h2>7. Payments</h2>
+          <p>Payments are securely processed through third-party providers, including Viva Wallet. By making a payment, you agree:</p>
+          <ul>
+            <li>You are authorized to use the payment method.</li>
+            <li>Transactions may be subject to fraud checks.</li>
+            <li>Suspicious transactions may be declined or cancelled.</li>
+          </ul>
+          <p>Supported payment methods may include credit/debit cards, UPI, and digital wallets.</p>
+
+          <h2>8. Order Cancellation</h2>
+          <ul>
+            <li>Orders can be cancelled before dispatch.</li>
+            <li>Once shipped, cancellation may not be possible.</li>
+            <li>Refunds are processed as per our refund policy.</li>
+          </ul>
+
+          <h2>9. Shipping &amp; Delivery</h2>
+          <ul>
+            <li>Delivery available across eligible locations in India.</li>
+            <li>Delivery timelines are estimates.</li>
+            <li>Risk transfers upon delivery.</li>
+          </ul>
+          <p>Customers should inspect packages before accepting.</p>
+
+          <h2>10. Returns &amp; Refunds</h2>
+          <p>Eligible returns within 30 days of delivery must meet:</p>
+          <ul><li>Unused condition</li><li>Original packaging</li><li>All accessories included</li></ul>
+          <p><strong>Non-returnable items:</strong> opened software, hygiene-sensitive items (e.g., earbuds), customised products.</p>
+          <p><strong>Refund Policy:</strong> refunds processed within 5–10 business days, credited to the original payment method. Timelines may vary by bank/payment provider.</p>
+
+          <h2>11. Failed Transactions</h2>
+          <p>If payment is deducted but fails, the refund is processed within 5–7 business days. Contact support if delayed.</p>
+
+          <h2>12. Chargebacks &amp; Fraud</h2>
+          <p>We reserve the right to investigate disputed payments and suspend accounts involved in fraudulent or abusive chargebacks.</p>
+
+          <h2>13. Intellectual Property</h2>
+          <p>All content on MAPLE is owned or licensed by SynapseEngine OÜ and protected under applicable laws. Unauthorized use is prohibited.</p>
+
+          <h2>14. Prohibited Use</h2>
+          <p>Users must not:</p>
+          <ul><li>Engage in illegal activities</li><li>Attempt to hack or disrupt the platform</li><li>Conduct fraudulent transactions</li><li>Resell without authorization</li></ul>
+
+          <h2>15. Limitation of Liability</h2>
+          <p>To the maximum extent permitted by law, liability is limited to the amount paid for the order. No liability for indirect or consequential damages.</p>
+
+          <h2>16. Indemnification</h2>
+          <p>You agree to indemnify and hold harmless SynapseEngine OÜ from claims arising due to misuse of services or violation of these Terms.</p>
+
+          <h2>17. Privacy</h2>
+          <p>Use of MAPLE is also governed by our <a href="/privacy">Privacy Policy</a>.</p>
+
+          <h2>18. Governing Law &amp; Jurisdiction</h2>
+          <p>These Terms are governed by the laws of India. All disputes fall under the jurisdiction of the Courts in Bengaluru, Karnataka. Parties agree to attempt mediation before litigation.</p>
+
+          <h2>19. Grievance Officer (India Compliance)</h2>
+          <ul>
+            <li><strong>Name:</strong> To be appointed</li>
+            <li><strong>Email:</strong> <a href="mailto:admin@MapleCoreInc.com">admin@MapleCoreInc.com</a></li>
+            <li><strong>Response Time:</strong> 7–15 business days</li>
+          </ul>
+
+          <h2>20. Contact Us</h2>
+          <p>For support or inquiries:</p>
+          <ul>
+            <li>📧 <a href="mailto:support@maple.com">support@maple.com</a></li>
+            <li>📧 <a href="mailto:admin@MapleCoreInc.com">admin@MapleCoreInc.com</a></li>
+            <li>📞 +37257052072</li>
+          </ul>
         </section>
       </main>
     `
@@ -4288,28 +4390,112 @@ function privacyPage(user = null) {
     user,
     content: `
       <main class="mp-page">
-        <section class="mp-page-hero"><h1>Privacy Policy</h1><p>Your data, handled with the same care you'd want for your own.</p></section>
+        <section class="mp-page-hero">
+          <span class="mp-eyebrow">Last updated: April 2026</span>
+          <h1>Privacy Policy</h1>
+          <p>Your data, handled with the same care you'd want for your own.</p>
+        </section>
         <section class="mp-prose">
-          <h2>Data we collect</h2>
-          <p>To operate the Services, we collect information you provide directly — name, email, phone, shipping address, and order history — along with limited device and browsing information such as IP address, session identifiers, and referrer URLs. Payment card data is handled entirely by our PCI-compliant payment processor; MAPLE never stores full card numbers on our servers.</p>
-          <h2>How we use it</h2>
-          <p>We use your data to fulfil and ship orders, provide customer support, send transactional messages (order confirmations, delivery updates, OTPs), personalise recommendations, detect fraud, and improve our catalogue and website. We do not sell personal data.</p>
-          <h2>Cookies</h2>
-          <p>MAPLE uses first-party cookies for authentication, cart persistence, and theme preferences. Optional analytics cookies help us understand aggregate usage patterns. You can clear or block cookies through your browser at any time, though some site features may not work as expected.</p>
-          <h2>Third-party sharing</h2>
-          <p>We share data with a limited set of vetted processors — payment gateways, logistics partners, email/SMS providers, and cloud hosting — strictly to deliver the service you requested. Each processor operates under a data-processing agreement and may only use the data for the purposes we specify.</p>
-          <h2>Security</h2>
-          <p>All data in transit is encrypted via TLS. Passwords are stored as salted hashes and never in plain text. We restrict internal access to personal data on a strict need-to-know basis and log administrative actions for audit. Despite our best efforts, no online service is 100% secure; we urge you to choose strong, unique passwords.</p>
-          <h2>Data retention</h2>
-          <p>We retain order and invoice records for the period required by Indian tax and consumer-protection law (typically seven years). Accounts inactive for more than three years may be archived or deleted on request.</p>
-          <h2>User rights</h2>
-          <p>You may request a copy of your personal data, correct inaccuracies, port your data to another service, or ask us to delete your account. Email <a href="mailto:support@maple.com">support@maple.com</a> and we will respond within 30 days.</p>
-          <h2>Children</h2>
-          <p>MAPLE's services are not directed at children under 13, and we do not knowingly collect data from them. If a parent or guardian believes a child has provided data, please contact us for prompt deletion.</p>
-          <h2>Changes</h2>
-          <p>We may update this policy to reflect new features, legal requirements, or best practice. Material changes will be announced on the homepage and by email to registered users at least 14 days before they take effect.</p>
-          <h2>Contact</h2>
-          <p>Data Protection Officer: <a href="mailto:admin@MapleCoreInc.com">admin@MapleCoreInc.com</a>. General queries: <a href="mailto:support@maple.com">support@maple.com</a>.</p>
+          <h2>1. Company Information</h2>
+          <p>This Privacy Policy applies to services operated by:</p>
+          <ul>
+            <li><strong>SynapseEngine OÜ</strong></li>
+            <li><strong>Registered Address:</strong> Harju maakond, Tallinn, Kesklinna linnaosa, Tartu mnt 67/1-13b, 10115, Estonia</li>
+            <li><strong>Phone:</strong> +37257052072</li>
+            <li><strong>Email:</strong> <a href="mailto:support@maple.com">support@maple.com</a></li>
+          </ul>
+
+          <h2>2. Data We Collect</h2>
+          <p><strong>Information you provide:</strong></p>
+          <ul><li>Name</li><li>Email address</li><li>Phone number</li><li>Shipping and billing address</li><li>Order history</li></ul>
+          <p><strong>Automatically collected data:</strong></p>
+          <ul><li>IP address</li><li>Device/browser information</li><li>Session identifiers</li><li>Referrer URLs</li></ul>
+          <p>Payment card details are processed securely by third-party PCI-compliant providers such as Viva Wallet. We do not store full card details.</p>
+
+          <h2>3. How We Use Your Data</h2>
+          <p>We use your data to:</p>
+          <ul>
+            <li>Process and deliver orders</li>
+            <li>Provide customer support</li>
+            <li>Send transactional updates (order, delivery, OTP)</li>
+            <li>Personalise recommendations</li>
+            <li>Prevent fraud and abuse</li>
+            <li>Improve our services</li>
+          </ul>
+          <p>We do not sell your personal data.</p>
+
+          <h2>4. Legal Basis for Processing</h2>
+          <p>We process your data based on:</p>
+          <ul>
+            <li>Contractual necessity (order fulfilment)</li>
+            <li>Legal obligations (tax, compliance)</li>
+            <li>Legitimate interests (fraud detection, analytics)</li>
+            <li>Consent (marketing and cookies where applicable)</li>
+          </ul>
+
+          <h2>5. Cookies</h2>
+          <p>We use cookies for:</p>
+          <ul><li>Login/authentication</li><li>Cart functionality</li><li>Preferences</li></ul>
+          <p>Optional analytics cookies help us improve our platform. You can manage cookies via browser settings or consent tools. Disabling cookies may affect functionality.</p>
+
+          <h2>6. Marketing Communications</h2>
+          <p>With your consent, we may send promotional emails, offers, and updates. You can opt out anytime using the unsubscribe link or by contacting us.</p>
+
+          <h2>7. Third-Party Sharing</h2>
+          <p>We share data only with trusted partners:</p>
+          <ul>
+            <li>Payment providers</li>
+            <li>Logistics partners</li>
+            <li>Email/SMS services</li>
+            <li>Cloud infrastructure providers</li>
+          </ul>
+          <p>All partners operate under strict data-processing agreements.</p>
+
+          <h2>8. International Data Transfers</h2>
+          <p>As a global business, your data may be processed outside your country, including in Estonia. We ensure appropriate safeguards are in place, such as secure infrastructure, contractual protections, and trusted service providers.</p>
+
+          <h2>9. Security</h2>
+          <p>We implement:</p>
+          <ul>
+            <li>TLS encryption for data in transit</li>
+            <li>Secure password hashing</li>
+            <li>Access control policies</li>
+            <li>Activity logging</li>
+          </ul>
+          <p>However, no system is completely secure.</p>
+
+          <h2>10. Data Retention</h2>
+          <ul>
+            <li>Orders and invoices: up to 7 years (legal requirement)</li>
+            <li>Account data: until deletion request or inactivity</li>
+          </ul>
+          <p>Inactive accounts may be archived or removed.</p>
+
+          <h2>11. Your Rights</h2>
+          <p>You have the right to:</p>
+          <ul>
+            <li>Access your data</li>
+            <li>Correct inaccuracies</li>
+            <li>Request deletion</li>
+            <li>Request data portability</li>
+          </ul>
+          <p>Contact: <a href="mailto:support@maple.com">support@maple.com</a>. Response time: within 30 days.</p>
+
+          <h2>12. Children's Privacy</h2>
+          <p>Our services are not intended for children under 13. We do not knowingly collect such data.</p>
+
+          <h2>13. Data Breach Notification</h2>
+          <p>In case of a data breach, we will notify affected users and authorities where required by law.</p>
+
+          <h2>14. Changes to This Policy</h2>
+          <p>We may update this policy periodically. Significant changes will be communicated via website notice and email (if applicable).</p>
+
+          <h2>15. Contact &amp; Data Protection Officer</h2>
+          <ul>
+            <li><strong>Data Protection Officer:</strong> <a href="mailto:admin@MapleCoreInc.com">admin@MapleCoreInc.com</a></li>
+            <li><strong>Support:</strong> <a href="mailto:support@maple.com">support@maple.com</a></li>
+            <li><strong>Phone:</strong> +37257052072</li>
+          </ul>
         </section>
       </main>
     `
@@ -4324,22 +4510,88 @@ function disclaimerPage(user = null) {
     user,
     content: `
       <main class="mp-page">
-        <section class="mp-page-hero"><h1>Disclaimer</h1><p>Important notes about the information shown on MAPLE.</p></section>
+        <section class="mp-page-hero">
+          <span class="mp-eyebrow">Last updated: April 2026</span>
+          <h1>Disclaimer</h1>
+          <p>Important notes about the information shown on MAPLE.</p>
+        </section>
         <section class="mp-prose">
-          <h2>Product information</h2>
-          <p>Product descriptions, images, specifications, and feature lists on MAPLE are compiled from manufacturer data sheets, official press materials, and our editorial team. While we take reasonable steps to keep listings accurate and current, manufacturers occasionally revise specifications, ship region-specific variants, or change what's included in the retail box without notice. For binding specifications always refer to the official brand website and the physical product packaging.</p>
-          <h2>Pricing accuracy</h2>
-          <p>We strive to display correct prices at all times. However, in the rare event of a typographical error, pricing-engine glitch, or currency-conversion mismatch, MAPLE reserves the right to cancel or refuse any order placed at the incorrect price, even after order confirmation, and to refund any amount already charged in full.</p>
-          <h2>Third-party links</h2>
-          <p>The website may contain links to third-party websites — for example, brand manuals, warranty portals, or payment gateways. MAPLE does not control and is not responsible for the content, privacy practices, or availability of external sites, and the presence of a link does not constitute endorsement. You access third-party sites at your own risk.</p>
-          <h2>No medical or professional advice</h2>
-          <p>Certain products sold on MAPLE — including wearables, fitness bands, and health-tracking devices — may display information related to heart rate, blood oxygen, sleep, or similar metrics. Such output is for general wellness reference only and is not a substitute for professional medical advice, diagnosis, or treatment. Always consult a qualified medical practitioner before acting on any reading.</p>
-          <h2>Warranty pass-through</h2>
-          <p>Unless explicitly stated, all manufacturer warranties and after-sales services are provided by the respective brand's authorised service network, not by MAPLE. We assist with claims through our customer-support team, but the terms, duration, and inclusions of any warranty are those published by the manufacturer. Retain your tax invoice and original packaging to ease warranty claims.</p>
-          <h2>Colour &amp; imagery</h2>
-          <p>Product photographs on MAPLE are representative. Actual finish, shade, and packaging may vary slightly due to lighting, screen calibration, or running changes from the manufacturer.</p>
-          <h2>Contact</h2>
-          <p>Questions or discrepancies? Email <a href="mailto:support@maple.com">support@maple.com</a> and we'll investigate promptly.</p>
+          <h2>1. Company Information</h2>
+          <p>This website is operated by:</p>
+          <ul>
+            <li><strong>SynapseEngine OÜ</strong></li>
+            <li><strong>Registered Address:</strong> Harju maakond, Tallinn, Kesklinna linnaosa, Tartu mnt 67/1-13b, 10115, Estonia</li>
+            <li><strong>Phone:</strong> +37257052072</li>
+            <li><strong>Email:</strong> <a href="mailto:support@maple.com">support@maple.com</a></li>
+          </ul>
+
+          <h2>2. Product Information</h2>
+          <p>Product descriptions, images, specifications, and features on MAPLE are based on manufacturer data, official materials, and internal editorial inputs. While we aim for accuracy:</p>
+          <ul>
+            <li>Manufacturers may change specifications without notice</li>
+            <li>Region-specific variants may differ</li>
+            <li>Box contents may vary</li>
+          </ul>
+          <p>For final and binding details, always refer to the official brand website and physical product packaging.</p>
+
+          <h2>3. Pricing Accuracy</h2>
+          <p>We strive to maintain accurate pricing at all times. However, in case of typographical errors, system glitches, or incorrect currency conversions, MAPLE reserves the right to:</p>
+          <ul>
+            <li>Cancel affected orders</li>
+            <li>Refuse processing</li>
+            <li>Issue full refunds where applicable</li>
+          </ul>
+
+          <h2>4. Product Availability</h2>
+          <p>All products are subject to availability. We reserve the right to discontinue products, limit quantities, or cancel orders due to stock issues.</p>
+
+          <h2>5. Third-Party Links</h2>
+          <p>MAPLE may include links to third-party websites such as brand manuals, warranty portals, and payment providers including Viva Wallet. We do not control or guarantee:</p>
+          <ul>
+            <li>Content accuracy</li>
+            <li>Privacy practices</li>
+            <li>Availability</li>
+          </ul>
+          <p>Accessing third-party sites is at your own risk.</p>
+
+          <h2>6. No Medical or Professional Advice</h2>
+          <p>Products such as wearables and health devices may provide heart rate, oxygen levels, and sleep tracking. This data is for informational purposes only and not medical advice. Always consult a qualified medical professional before making health decisions.</p>
+
+          <h2>7. Warranty Disclaimer</h2>
+          <p>Unless explicitly stated:</p>
+          <ul>
+            <li>Warranties are provided by the product manufacturer</li>
+            <li>MAPLE is not the warranty provider</li>
+          </ul>
+          <p>We may assist with claims, but terms and coverage are defined by the manufacturer. Customers should retain their invoice and packaging.</p>
+
+          <h2>8. Colour &amp; Imagery</h2>
+          <p>Images are for representation only. Actual products may vary due to lighting, display settings, or manufacturer updates.</p>
+
+          <h2>9. Product Compatibility</h2>
+          <p>Customers are responsible for ensuring compatibility with devices and correct specifications before purchase. MAPLE is not liable for incompatibility issues.</p>
+
+          <h2>10. Limitation of Liability</h2>
+          <p>To the maximum extent permitted by law, MAPLE (SynapseEngine OÜ) shall not be liable for:</p>
+          <ul>
+            <li>Inaccuracies in product information</li>
+            <li>Third-party content or links</li>
+            <li>Misinterpretation of product data</li>
+            <li>Indirect or consequential damages</li>
+          </ul>
+
+          <h2>11. Force Majeure</h2>
+          <p>We are not responsible for delays or failures caused by events beyond our control, including natural disasters, government restrictions, and supply chain disruptions.</p>
+
+          <h2>12. Relationship with Terms</h2>
+          <p>This Disclaimer should be read alongside our <a href="/terms">Terms &amp; Conditions</a> and <a href="/privacy">Privacy Policy</a>.</p>
+
+          <h2>13. Contact</h2>
+          <p>For questions or discrepancies:</p>
+          <ul>
+            <li>📧 <a href="mailto:support@maple.com">support@maple.com</a></li>
+            <li>📞 +37257052072</li>
+          </ul>
         </section>
       </main>
     `
@@ -4354,24 +4606,113 @@ function refundPage(user = null) {
     user,
     content: `
       <main class="mp-page">
-        <section class="mp-page-hero"><h1>Refund &amp; Returns</h1><p>Simple, fair, and 30 days long.</p></section>
+        <section class="mp-page-hero">
+          <span class="mp-eyebrow">Last updated: April 2026</span>
+          <h1>Refund &amp; Returns Policy</h1>
+          <p>Simple, fair, and 30 days long.</p>
+        </section>
         <section class="mp-prose">
-          <h2>30-day return window</h2>
-          <p>You can return most items purchased on MAPLE within 30 days of delivery. The clock starts the day your order is marked "Delivered" by the courier. Requests raised after 30 days are handled case-by-case and may be declined.</p>
-          <h2>Eligible items</h2>
-          <p>Items are eligible for return when they are unused, in original condition, with all accessories, manuals, free gifts, and retail packaging intact. Activation of a device does not automatically make it ineligible — but missing packaging, damage to the seal, or missing inbox contents may reduce the refund value.</p>
-          <h2>Ineligible items</h2>
-          <p>The following cannot be returned for hygiene, safety, or manufacturer-policy reasons: in-ear headphones and earbuds where the seal has been broken, pre-installed or activated software licences, customised or personalised products, screen protectors once peeled, and items marked "non-returnable" on the product page.</p>
-          <h2>How to start a return</h2>
-          <p>Sign in, open <em>Account → Order History</em>, select the item, choose "Return" and pick a reason. A reverse-pickup will be scheduled for your address within 24–72 hours. If self-ship is preferred for a remote pincode, we'll cover the shipping cost up to ₹200 on approval.</p>
-          <h2>Refund timelines</h2>
-          <p>Once we receive the item at our warehouse and it clears quality check (typically 48 hours), refunds are issued within 5–7 business days. The amount is returned to the original payment method — card, UPI, net-banking, or wallet. COD orders are refunded via bank transfer after we collect your account details through a secure form.</p>
-          <h2>Exchanges</h2>
-          <p>If you prefer a replacement (e.g., wrong colour or size), choose "Exchange" in the return flow. We'll ship the new unit as soon as the original is picked up and clears inspection. Exchanges are subject to stock availability; if the variant you want is sold out, we'll convert the request to a refund automatically.</p>
-          <h2>Damaged or defective on arrival</h2>
-          <p>If an item arrives damaged, defective, or doesn't match the listing, tell us within 72 hours of delivery with photos of the box and the product. We'll arrange a priority replacement or full refund — including any return shipping — at no cost to you.</p>
-          <h2>Contact</h2>
-          <p>Need help? Email <a href="mailto:support@maple.com">support@maple.com</a> with your order reference and we'll take it from there.</p>
+          <h2>1. Company Information</h2>
+          <p>This policy is operated by:</p>
+          <ul>
+            <li><strong>SynapseEngine OÜ</strong></li>
+            <li><strong>Registered Address:</strong> Harju maakond, Tallinn, Kesklinna linnaosa, Tartu mnt 67/1-13b, 10115, Estonia</li>
+            <li><strong>Phone:</strong> +37257052072</li>
+            <li><strong>Email:</strong> <a href="mailto:support@maple.com">support@maple.com</a></li>
+          </ul>
+
+          <h2>2. 30-Day Return Window</h2>
+          <ul>
+            <li>The return period begins when the order is marked "Delivered".</li>
+            <li>Requests after 30 days may be declined or reviewed case-by-case.</li>
+          </ul>
+
+          <h2>3. Eligible Items</h2>
+          <p>Items must be:</p>
+          <ul>
+            <li>Unused and in original condition</li>
+            <li>With all accessories, manuals, and packaging</li>
+            <li>Including free gifts (if any)</li>
+          </ul>
+          <p><em>Note:</em> Device activation alone does not make an item ineligible. Missing packaging or damage may result in partial refund or rejection.</p>
+
+          <h2>4. Ineligible Items</h2>
+          <p>The following are non-returnable:</p>
+          <ul>
+            <li>Opened in-ear headphones / earbuds</li>
+            <li>Activated software licenses</li>
+            <li>Customized or personalized products</li>
+            <li>Used screen protectors</li>
+            <li>Items marked "non-returnable"</li>
+          </ul>
+
+          <h2>5. How to Start a Return</h2>
+          <ol>
+            <li>Log in → Account → Order History</li>
+            <li>Select item → Click "Return"</li>
+            <li>Choose reason</li>
+          </ol>
+          <p><strong>Reverse pickup:</strong> scheduled within 24–72 hours.</p>
+          <p><strong>Remote locations:</strong> self-ship allowed, reimbursement up to ₹200 (on approval).</p>
+
+          <h2>6. Refund Process &amp; Timelines</h2>
+          <ul>
+            <li>Items undergo quality check within 48 hours</li>
+            <li>Refund processed within 5–7 business days</li>
+          </ul>
+          <p><strong>Refund method:</strong></p>
+          <ul>
+            <li>Returned to original payment method (card/UPI/wallet)</li>
+            <li>COD orders refunded via bank transfer</li>
+          </ul>
+          <p>Processing time may vary depending on bank/payment provider such as Viva Wallet.</p>
+
+          <h2>7. Non-Refundable Charges</h2>
+          <p>Unless stated otherwise:</p>
+          <ul>
+            <li>Shipping charges may not be refunded</li>
+            <li>COD fees (if any) are non-refundable</li>
+          </ul>
+
+          <h2>8. Exchanges</h2>
+          <ul>
+            <li>Available via the "Exchange" option</li>
+            <li>Shipped after original item passes inspection</li>
+            <li>Subject to stock availability</li>
+          </ul>
+          <p>If unavailable, the request will be automatically converted to a refund.</p>
+
+          <h2>9. Damaged / Defective / Wrong Item</h2>
+          <p>Report within 72 hours of delivery with product photos and packaging images. We will:</p>
+          <ul>
+            <li>Replace the item, or</li>
+            <li>Issue a full refund</li>
+          </ul>
+          <p>Return shipping cost is fully covered by us.</p>
+
+          <h2>10. Return Rejection</h2>
+          <p>Returns may be rejected or partially refunded if items show signs of use, are damaged, or have missing components.</p>
+
+          <h2>11. Pickup Responsibility</h2>
+          <p>Customers must:</p>
+          <ul>
+            <li>Ensure availability for pickup</li>
+            <li>Provide correct address</li>
+          </ul>
+          <p>Failed pickups may delay processing or lead to cancellation of the return request.</p>
+
+          <h2>12. Abuse &amp; Fair Use</h2>
+          <p>We reserve the right to refuse returns or suspend accounts in cases of excessive returns, fraudulent activity, or policy misuse.</p>
+
+          <h2>13. Relationship with Terms</h2>
+          <p>This policy forms part of our <a href="/terms">Terms &amp; Conditions</a>.</p>
+
+          <h2>14. Contact</h2>
+          <p>Need help?</p>
+          <ul>
+            <li>📧 <a href="mailto:support@maple.com">support@maple.com</a></li>
+            <li>📞 +37257052072</li>
+          </ul>
         </section>
       </main>
     `
