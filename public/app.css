@@ -2053,8 +2053,25 @@ h1.page-title { margin: 0; font-size: clamp(1.8rem, 3vw, 3rem); line-height: 1.0
 .cr-footer-col a:hover { color: #fff; }
 .cr-footer-brand p { color: #a8afbd; font-size: 14px; line-height: 1.55; margin: 10px 0 16px; max-width: 280px; }
 .cr-footer-social { display: flex; gap: 10px; }
-.cr-footer-social a { width: 36px; height: 36px; border-radius: 50%; background: #1b2030; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; font-weight: 600; padding: 0; }
-.cr-footer-social a:hover { background: #2a3142; }
+.cr-footer-social a,
+.cr-footer .cr-footer-social a,
+body[class*="theme-"] .cr-footer .cr-footer-social a {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: #1b2030;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #ffffff;                  /* SVGs use currentColor — force white so icons stay visible on every theme */
+  font-size: 12px; font-weight: 600; padding: 0;
+  border: 1px solid rgba(255,255,255,0.08);
+  transition: background 160ms ease, color 160ms ease, transform 120ms ease;
+}
+.cr-footer-social a:hover,
+.cr-footer .cr-footer-social a:hover,
+body[class*="theme-"] .cr-footer .cr-footer-social a:hover {
+  background: var(--accent, #0d9488);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+.cr-footer-social svg { display: block; }
 .cr-footer-apps { max-width: 1280px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; padding: 20px 0; border-top: 1px solid #1b2030; border-bottom: 1px solid #1b2030; gap: 20px; flex-wrap: wrap; }
 .cr-footer-apps-text strong { display: block; color: #fff; font-size: 16px; }
 .cr-footer-apps-text span { color: #a8afbd; font-size: 13px; }
