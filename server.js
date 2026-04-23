@@ -2125,7 +2125,7 @@ function renderCromaFooter() {
       </div>
       <div class="cr-footer-bottom">
         <span>© 2026 SynapseEngine OÜ. All rights reserved.</span>
-        <span>Operating the MAPLE brand · Made in India</span>
+        <span>Operating the MAPLE brand</span>
       </div>
     </footer>
   `;
