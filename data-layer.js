@@ -123,31 +123,21 @@ class SqliteStore {
   }
 }
 
-class MongoMirrorStore {
-  constructor(sqliteStore, uri) {
+class FirebaseMirrorStore {
+  constructor(sqliteStore) {
     this.sqliteStore = sqliteStore;
-    this.uri = uri;
-    this.client = null;
     this.db = null;
   }
 
   async init() {
-    if (!MongoClient || !this.uri) return;
-    try {
-      this.client = new MongoClient(this.uri);
-      await this.client.connect();
-      this.db = this.client.db();
-      await this.db.collection("users").createIndex({ email: 1 }, { unique: true });
-      await this.db.collection("sessions").createIndex({ session_token: 1 }, { unique: true });
-    } catch {
-      this.db = null;
-    }
+    const { firebaseDb } = require("./firebase-config");
+    this.db = firebaseDb;
   }
 
   async getUserByEmail(email) {
     if (this.db) {
-      const user = await this.db.collection("users").findOne({ email: email.toLowerCase() });
-      if (user) return user;
+      const snap = await this.db.collection("users").doc(email.toLowerCase()).get();
+      if (snap.exists) return snap.data();
     }
     return this.sqliteStore.getUserByEmail(email);
   }
@@ -155,11 +145,7 @@ class MongoMirrorStore {
   async createUser(payload) {
     const user = await this.sqliteStore.createUser(payload);
     if (this.db) {
-      await this.db.collection("users").updateOne(
-        { email: user.email },
-        { $set: user },
-        { upsert: true }
-      );
+      await this.db.collection("users").doc(user.email).set(user, { merge: true });
     }
     return user;
   }
@@ -167,17 +153,14 @@ class MongoMirrorStore {
   async markUserVerified(email) {
     await this.sqliteStore.markUserVerified(email);
     if (this.db) {
-      await this.db.collection("users").updateOne(
-        { email: email.toLowerCase() },
-        { $set: { verified: 1 } }
-      );
+      await this.db.collection("users").doc(email.toLowerCase()).update({ verified: 1 }).catch(() => {});
     }
   }
 
   async saveOtp(payload) {
     await this.sqliteStore.saveOtp(payload);
     if (this.db) {
-      await this.db.collection("otp_codes").insertOne({
+      await this.db.collection("otp_codes").add({
         email: payload.email.toLowerCase(),
         purpose: payload.purpose,
         expires_at: payload.expiresAt,
@@ -193,11 +176,11 @@ class MongoMirrorStore {
   async createSession(email) {
     const session = await this.sqliteStore.createSession(email);
     if (this.db) {
-      await this.db.collection("sessions").updateOne(
-        { session_token: session.token },
-        { $set: { session_token: session.token, user_email: email.toLowerCase(), expires_at: session.expiresAt } },
-        { upsert: true }
-      );
+      await this.db.collection("sessions").doc(session.token).set({
+        session_token: session.token,
+        user_email: email.toLowerCase(),
+        expires_at: session.expiresAt
+      }, { merge: true });
     }
     return session;
   }
@@ -209,14 +192,14 @@ class MongoMirrorStore {
   async deleteSession(token) {
     await this.sqliteStore.deleteSession(token);
     if (this.db) {
-      await this.db.collection("sessions").deleteOne({ session_token: token });
+      await this.db.collection("sessions").doc(token).delete().catch(() => {});
     }
   }
 }
 
 async function createDataLayer(db, mongoUri) {
   const sqliteStore = new SqliteStore(db);
-  const store = new MongoMirrorStore(sqliteStore, mongoUri);
+  const store = new FirebaseMirrorStore(sqliteStore);
   await store.init();
   return store;
 }
