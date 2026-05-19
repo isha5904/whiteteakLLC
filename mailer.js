@@ -45,10 +45,10 @@ async function sendOtpEmail(email, otp, verifyLink = "") {
   await transporter.sendMail({
     from: config.from,
     to: email,
-    subject: "Your MAPLE verification code",
-    text: `Your MAPLE OTP is ${otp}. It is valid for 10 minutes.${linkBlockText}`,
+    subject: "Your WHITETEAKLLC verification code",
+    text: `Your WHITETEAKLLC OTP is ${otp}. It is valid for 10 minutes.${linkBlockText}`,
     html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px">
-             <h2 style="color:#111">Welcome to MAPLE</h2>
+         <h2 style="color:#111">Welcome to WHITETEAKLLC</h2>
              <p>Your verification code is:</p>
              <p style="font-size:32px;letter-spacing:6px;font-weight:700;background:#f4f4f6;padding:16px 24px;border-radius:8px;text-align:center;color:#111">${otp}</p>
              <p>This code is valid for 10 minutes.</p>

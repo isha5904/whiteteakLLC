@@ -1,4 +1,6 @@
 node_modules/
+.env
 data/store.db
 server.err
 server.log
+drive-download-*/

@@ -411,11 +411,12 @@ function loadState() {
 }
 
 function formatCurrency(amount) {
-  return new Intl.NumberFormat("en-IN", {
+  const displayAmount = Number(amount || 0) * 0.012;
+  return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0
-  }).format(amount);
+    currency: "USD",
+    maximumFractionDigits: 2
+  }).format(displayAmount);
 }
 
 function escapeHtml(value) {

@@ -776,12 +776,140 @@ function verifyRazorpaySignature(orderId, paymentId, signature) {
   }
 }
 
+// === PayPal helpers (zero-dep via https) ===
+const PAYPAL_CLIENT_ID = process.env.PAYPAL_CLIENT_ID || "";
+const PAYPAL_SECRET = process.env.PAYPAL_SECRET || process.env.PAYPAL_CLIENT_SECRET || "";
+const PAYPAL_MODE = (process.env.PAYPAL_MODE || "sandbox").toLowerCase();
+const PAYPAL_CURRENCY = (process.env.PAYPAL_CURRENCY || "USD").toUpperCase();
+const PAYPAL_INR_TO_CURRENCY_RATE = Number(process.env.PAYPAL_INR_TO_CURRENCY_RATE || "0.012");
+const STORE_CURRENCY = (process.env.STORE_CURRENCY || "USD").toUpperCase();
+const STORE_INR_TO_USD_RATE = Number(process.env.STORE_INR_TO_USD_RATE || PAYPAL_INR_TO_CURRENCY_RATE || "0.012");
+const PAYPAL_API_HOST = PAYPAL_MODE === "live" ? "api-m.paypal.com" : "api-m.sandbox.paypal.com";
+
+function paypalConfigured() {
+  return Boolean(PAYPAL_CLIENT_ID && PAYPAL_SECRET);
+}
+
+function paypalAmountFromInr(totalInr) {
+  const amount = PAYPAL_CURRENCY === "INR"
+    ? Number(totalInr)
+    : Number(totalInr) * PAYPAL_INR_TO_CURRENCY_RATE;
+  return Math.max(0.01, amount).toFixed(2);
+}
+
+function paypalRequest(pathname, method, body, accessToken = "") {
+  return new Promise((resolve, reject) => {
+    const https = require("https");
+    const payload = body ? JSON.stringify(body) : "";
+    const headers = {
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(payload)
+    };
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+    const req = https.request({
+      hostname: PAYPAL_API_HOST,
+      path: pathname,
+      method,
+      headers
+    }, (apiRes) => {
+      let chunks = "";
+      apiRes.on("data", (chunk) => { chunks += chunk; });
+      apiRes.on("end", () => {
+        let parsed = {};
+        try { parsed = chunks ? JSON.parse(chunks) : {}; } catch (error) { reject(error); return; }
+        if (apiRes.statusCode >= 200 && apiRes.statusCode < 300) resolve(parsed);
+        else reject(new Error(parsed.message || parsed.error_description || `PayPal error (${apiRes.statusCode})`));
+      });
+    });
+    req.on("error", reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
+function getPayPalAccessToken() {
+  return new Promise((resolve, reject) => {
+    if (!paypalConfigured()) {
+      reject(new Error("PayPal credentials not configured"));
+      return;
+    }
+    const https = require("https");
+    const payload = "grant_type=client_credentials";
+    const req = https.request({
+      hostname: PAYPAL_API_HOST,
+      path: "/v1/oauth2/token",
+      method: "POST",
+      headers: {
+        "Authorization": `Basic ${Buffer.from(`${PAYPAL_CLIENT_ID}:${PAYPAL_SECRET}`).toString("base64")}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Length": Buffer.byteLength(payload)
+      }
+    }, (apiRes) => {
+      let chunks = "";
+      apiRes.on("data", (chunk) => { chunks += chunk; });
+      apiRes.on("end", () => {
+        try {
+          const parsed = JSON.parse(chunks || "{}");
+          if (apiRes.statusCode >= 200 && apiRes.statusCode < 300 && parsed.access_token) {
+            resolve(parsed.access_token);
+          } else {
+            reject(new Error(parsed.error_description || `PayPal auth error (${apiRes.statusCode})`));
+          }
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+    req.on("error", reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
+async function createPayPalOrder(totalInr) {
+  const accessToken = await getPayPalAccessToken();
+  return paypalRequest("/v2/checkout/orders", "POST", {
+    intent: "CAPTURE",
+    purchase_units: [{
+      amount: {
+        currency_code: PAYPAL_CURRENCY,
+        value: paypalAmountFromInr(totalInr)
+      }
+    }]
+  }, accessToken);
+}
+
+async function capturePayPalOrder(paypalOrderId) {
+  const accessToken = await getPayPalAccessToken();
+  return paypalRequest(`/v2/checkout/orders/${encodeURIComponent(paypalOrderId)}/capture`, "POST", {}, accessToken);
+}
+
+function validateCheckoutOrderPayload(o) {
+  const required = ["customerName", "email", "phone", "address", "city", "state", "pincode", "items"];
+  for (const key of required) {
+    if (!o[key] || (Array.isArray(o[key]) && o[key].length === 0)) {
+      throw new Error(`Missing ${key}`);
+    }
+  }
+  const items = o.items.map((item) => {
+    const product = db.prepare("SELECT id, name, price, stock FROM products WHERE id = ?").get(item.id);
+    if (!product) throw new Error(`Product ${item.id} not found`);
+    const quantity = Math.max(1, Number(item.quantity || 1));
+    if (quantity > product.stock) throw new Error(`Only ${product.stock} units left for ${product.name}`);
+    return { id: product.id, name: product.name, price: product.price, quantity };
+  });
+  const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  return { items, total };
+}
+
 function currency(value) {
-  return new Intl.NumberFormat("en-IN", {
+  const numericValue = Number(value || 0);
+  const displayValue = STORE_CURRENCY === "USD" ? numericValue * STORE_INR_TO_USD_RATE : numericValue;
+  return new Intl.NumberFormat(STORE_CURRENCY === "USD" ? "en-US" : "en-IN", {
     style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0
-  }).format(value);
+    currency: STORE_CURRENCY,
+    maximumFractionDigits: STORE_CURRENCY === "USD" ? 2 : 0
+  }).format(displayValue);
 }
 
 function escapeHtml(value) {
@@ -1082,7 +1210,7 @@ function layout({ title, description = "", currentPath = "/", content, user = nu
     <div class="shell">
       <header class="site-header mp-header">
         <a class="brand mp-brand" href="/">
-          <span class="mp-brand-mark" aria-hidden="true">M</span><span class="brand-word">MAPLE</span>
+          <span class="mp-brand-mark" aria-hidden="true">W</span><span class="brand-word">WHITETEAKLLC</span>
         </a>
         <button type="button" class="menu-link mp-nav-toggle" data-mp-nav-toggle aria-label="Open menu" aria-expanded="false">☰ <span>Menu</span></button>
         <nav class="main-nav mp-header-nav">${nav(currentPath)}</nav>
@@ -1189,7 +1317,7 @@ function parseCookies(req) {
 }
 
 // HMAC-signed stateless token — survives Vercel cold starts (no DB lookup needed)
-const AUTH_SECRET = process.env.AUTH_SECRET || process.env.ADMIN_PASSWORD || "maple-default-secret-change-me";
+const AUTH_SECRET = process.env.AUTH_SECRET || process.env.ADMIN_PASSWORD || "whiteteakllc-default-secret-change-me";
 function signAuthToken(payload) {
   const data = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const sig = crypto.createHmac("sha256", AUTH_SECRET).update(data).digest("base64url");
@@ -1461,28 +1589,28 @@ function legacyHomePage(user = null) {
     {
       title: "Laptops for every desk",
       subtitle: "Productivity, creators, and campus-ready picks",
-      price: "Starting at ₹49,990",
+      price: `Starting at ${currency(49990)}`,
       href: "/category/laptops",
       image: featured[0]?.image || "/assets/products/macbook-air-m3-1.png"
     },
     {
       title: "True wireless audio",
       subtitle: "Earbuds and speakers with all-day battery",
-      price: "Starting at ₹1,499",
+      price: `Starting at ${currency(1499)}`,
       href: "/category/audio",
       image: audio[0]?.image || featured[1]?.image || "/assets/products/macbook-air-m3-2.png"
     },
     {
       title: "Smartphones with flagship chips",
       subtitle: "Higher RAM and storage options available",
-      price: "Starting at ₹17,999",
+      price: `Starting at ${currency(17999)}`,
       href: "/category/mobiles",
       image: mobiles[0]?.image || featured[2]?.image || "/assets/products/macbook-air-m3-3.png"
     },
     {
       title: "4K TVs and smart entertainment",
       subtitle: "Cinema-style viewing for modern living rooms",
-      price: "Starting at ₹27,990",
+      price: `Starting at ${currency(27990)}`,
       href: "/category/tvs",
       image: featured[3]?.image || featured[0]?.image || "/assets/products/macbook-air-m3-1.png"
     }
@@ -1656,7 +1784,7 @@ function legacyHomePage(user = null) {
   );
 
   return layout({
-    title: "MAPLE | Electronics",
+    title: "WHITETEAKLLC | Electronics",
     description: "Multi-page electronics website with 50+ products, shopping cart, checkout, and order tracking.",
     currentPath: "/",
     user,
@@ -1856,7 +1984,7 @@ function homePage(user = null) {
   const popular = products.slice(10, 18);
   void recommended; void newArrivals; void featureItems; void popular;
 
-  const formatPrice = (n) => "\u20B9" + Number(n).toLocaleString("en-IN");
+  const formatPrice = (n) => currency(n);
 
   const productCardV2 = (p) => `
     <a class="v2-card" href="/products">
@@ -1875,8 +2003,8 @@ function homePage(user = null) {
 
   const slides = [
     {
-      kicker: "Up to ₹12,000 off",
-      title: "MAPLE Mobiles",
+      kicker: `Up to ${currency(12000)} off`,
+      title: "WHITETEAKLLC Mobiles",
       subtitle: "iPhone 15, Galaxy S24, Pixel 9 Pro and more — premium smartphones, certified genuine.",
       cta: "Shop Mobiles",
       href: "/category/mobiles",
@@ -1917,7 +2045,7 @@ function homePage(user = null) {
     {
       kicker: "Fresh in",
       title: "New arrivals — up to 15% off",
-      subtitle: "Latest launches hand-picked by our editors. Free delivery above ₹999.",
+      subtitle: `Latest launches hand-picked by our editors. Free delivery above ${currency(999)}.`,
       cta: "Explore new",
       href: "/products?sort=newest",
       image: "/public/assets/products-v3/laptops/laptops-10.jpg",
@@ -1972,14 +2100,14 @@ function homePage(user = null) {
     } catch { return []; }
   })();
   const priceBuckets = [
-    { label: "Under ₹10,000", href: "/products?maxPrice=10000", bg: "linear-gradient(135deg,#e0f2fe,#bae6fd)" },
-    { label: "₹10K – ₹30K", href: "/products?minPrice=10000&maxPrice=30000", bg: "linear-gradient(135deg,#fef3c7,#fde68a)" },
-    { label: "₹30K – ₹80K", href: "/products?minPrice=30000&maxPrice=80000", bg: "linear-gradient(135deg,#fce7f3,#fbcfe8)" },
-    { label: "Over ₹80,000", href: "/products?minPrice=80000", bg: "linear-gradient(135deg,#ddd6fe,#c7d2fe)" }
+    { label: `Under ${currency(10000)}`, href: "/products?maxPrice=10000", bg: "linear-gradient(135deg,#e0f2fe,#bae6fd)" },
+    { label: `${currency(10000)} - ${currency(30000)}`, href: "/products?minPrice=10000&maxPrice=30000", bg: "linear-gradient(135deg,#fef3c7,#fde68a)" },
+    { label: `${currency(30000)} - ${currency(80000)}`, href: "/products?minPrice=30000&maxPrice=80000", bg: "linear-gradient(135deg,#fce7f3,#fbcfe8)" },
+    { label: `Over ${currency(80000)}`, href: "/products?minPrice=80000", bg: "linear-gradient(135deg,#ddd6fe,#c7d2fe)" }
   ];
   return layout({
-    title: "MAPLE \u2014 Electronics reimagined",
-    description: "MAPLE — India's modern electronics store for phones, laptops, audio and more.",
+    title: "WHITETEAKLLC \u2014 Electronics reimagined",
+    description: "WHITETEAKLLC — India's modern electronics store for phones, laptops, audio and more.",
     currentPath: "/",
     user,
     content: `
@@ -2028,10 +2156,10 @@ function homePage(user = null) {
         </section>
 
         <section class="mp-section mp-why mp-why-v2">
-          <div class="mp-section-head"><h2>Why shop MAPLE</h2></div>
+          <div class="mp-section-head"><h2>Why shop WHITETEAKLLC</h2></div>
           <div class="mp-why-grid">
             <article class="mp-why-card mp-why-tile"><div class="mp-why-icon" aria-hidden="true">✓</div><h3>100% Genuine</h3><p>Every product sourced from brands and authorised distributors.</p></article>
-            <article class="mp-why-card mp-why-tile"><div class="mp-why-icon" aria-hidden="true">⚡</div><h3>Free Delivery ₹999+</h3><p>Fast, trackable shipping to 18,000+ pincodes across India.</p></article>
+            <article class="mp-why-card mp-why-tile"><div class="mp-why-icon" aria-hidden="true">⚡</div><h3>Free Delivery ${currency(999)}+</h3><p>Fast, trackable shipping to 18,000+ pincodes across India.</p></article>
             <article class="mp-why-card mp-why-tile"><div class="mp-why-icon" aria-hidden="true">↺</div><h3>30-Day Easy Returns</h3><p>Change of mind? Send it back within 30 days — no hassle.</p></article>
           </div>
         </section>
@@ -2069,7 +2197,7 @@ function homePage(user = null) {
         <section class="mp-section mp-news-section">
           <form class="mp-news-form" data-mp-newsletter>
             <div>
-              <h2>Join the Maple newsletter</h2>
+              <h2>Join the WHITETEAKLLC newsletter</h2>
               <p>Early access to launches and subscriber-only discounts.</p>
             </div>
             <div class="mp-news-row">
@@ -2089,16 +2217,16 @@ function renderCromaFooter() {
     <footer class="cr-footer mp-footer">
       <div class="cr-footer-top">
         <div class="cr-footer-col cr-footer-brand">
-          <span class="mp-brand-mark" aria-hidden="true">M</span><span class="brand-word">MAPLE</span>
+          <span class="mp-brand-mark" aria-hidden="true">W</span><span class="brand-word">WHITETEAKLLC</span>
           <p>India's favourite destination for electronics, gadgets & appliances.</p>
           <div class="cr-footer-social mp-social">
-            <a href="https://instagram.com/maple" aria-label="Instagram" target="_blank" rel="noopener"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor"/></svg></a>
-            <a href="https://youtube.com/@maple" aria-label="YouTube" target="_blank" rel="noopener"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21.6 7.2a2.6 2.6 0 0 0-1.8-1.8C18.2 5 12 5 12 5s-6.2 0-7.8.4A2.6 2.6 0 0 0 2.4 7.2 27 27 0 0 0 2 12a27 27 0 0 0 .4 4.8 2.6 2.6 0 0 0 1.8 1.8C5.8 19 12 19 12 19s6.2 0 7.8-.4a2.6 2.6 0 0 0 1.8-1.8A27 27 0 0 0 22 12a27 27 0 0 0-.4-4.8ZM10 15V9l5 3Z"/></svg></a>
+            <a href="https://instagram.com/whiteteakllc" aria-label="Instagram" target="_blank" rel="noopener"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor"/></svg></a>
+            <a href="https://youtube.com/@whiteteakllc" aria-label="YouTube" target="_blank" rel="noopener"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M21.6 7.2a2.6 2.6 0 0 0-1.8-1.8C18.2 5 12 5 12 5s-6.2 0-7.8.4A2.6 2.6 0 0 0 2.4 7.2 27 27 0 0 0 2 12a27 27 0 0 0 .4 4.8 2.6 2.6 0 0 0 1.8 1.8C5.8 19 12 19 12 19s6.2 0 7.8-.4a2.6 2.6 0 0 0 1.8-1.8A27 27 0 0 0 22 12a27 27 0 0 0-.4-4.8ZM10 15V9l5 3Z"/></svg></a>
           </div>
         </div>
         <div class="cr-footer-col">
-          <h4>About Maple</h4>
-          <a href="/about">About Maple</a>
+          <h4>About WHITETEAKLLC</h4>
+          <a href="/about">About WHITETEAKLLC</a>
           <a href="/contact">Contact Us</a>
         </div>
         <div class="cr-footer-col">
@@ -2124,8 +2252,8 @@ function renderCromaFooter() {
         </div>
       </div>
       <div class="cr-footer-bottom">
-        <span>© 2026 SynapseEngine OÜ. All rights reserved.</span>
-        <span>Operating the MAPLE brand</span>
+        <span>© 2026 WHITETEAKLLC. All rights reserved.</span>
+        <span>Operating the WHITETEAKLLC brand</span>
       </div>
     </footer>
   `;
@@ -2219,9 +2347,9 @@ function productsPage(url, forcedCategory = "", user = null) {
   const showConnectionFilter = category === "Headphones" || category === "Mouse";
 
   return layout({
-    title: category ? `${category} – MAPLE` : "All Products – MAPLE",
+    title: category ? `${category} – WHITETEAKLLC` : "All Products – WHITETEAKLLC",
     description: category
-      ? `Shop ${category} at MAPLE — compare specs, prices, and ratings across top brands.`
+      ? `Shop ${category} at WHITETEAKLLC — compare specs, prices, and ratings across top brands.`
       : "Browse 120+ electronics — laptops, mobiles, headphones, and mouse — with free delivery.",
     currentPath: "/products",
     user,
@@ -2285,7 +2413,7 @@ function productsPage(url, forcedCategory = "", user = null) {
                 </div>
               </div>
               <div class="cr-filter-block">
-                <h4>Price Range (₹)</h4>
+                <h4>Price Range (USD)</h4>
                 <div class="eo-price-range">
                   <input type="number" name="minPrice" placeholder="Min" value="${minPrice || ""}" min="0">
                   <input type="number" name="maxPrice" placeholder="Max" value="${maxPrice || ""}" min="0">
@@ -2431,7 +2559,7 @@ function legacyProductDetailPage(slug, user = null) {
   ];
 
   return layout({
-    title: `${product.name} | MAPLE`,
+    title: `${product.name} | WHITETEAKLLC`,
     description: product.description,
     currentPath: "/products",
     user,
@@ -2512,7 +2640,7 @@ function legacyProductDetailPage(slug, user = null) {
             ${specs.map((spec) => `<div class="summary-line border-row"><span>${escapeHtml(spec)}</span><strong>Included</strong></div>`).join("")}
           </article>
           <article class="panel-card">
-            <h2>Why buy from MAPLE</h2>
+            <h2>Why buy from WHITETEAKLLC</h2>
             <div class="summary-line border-row"><span>Installation & guidance</span><strong>Available</strong></div>
             <div class="summary-line border-row"><span>Secure checkout</span><strong>Enabled</strong></div>
             <div class="summary-line border-row"><span>Order tracking</span><strong>Live</strong></div>
@@ -2574,7 +2702,7 @@ function productDetailPageLegacyV2(slug, user = null) {
   ];
 
   return layout({
-    title: `${product.name} | MAPLE`,
+    title: `${product.name} | WHITETEAKLLC`,
     description: product.description,
     currentPath: "/products",
     user,
@@ -2812,7 +2940,7 @@ function productDetailPageLegacyV3(slug, user = null) {
   ];
 
   return layout({
-    title: `${product.name} | MAPLE`,
+    title: `${product.name} | WHITETEAKLLC`,
     description: product.description,
     currentPath: "/products",
     user,
@@ -3016,7 +3144,7 @@ function productDetailPageCleanLegacyV4(slug, user = null) {
   const galleryItems = product.images.slice(0, 3);
 
   return layout({
-    title: `${product.name} | MAPLE`,
+    title: `${product.name} | WHITETEAKLLC`,
     description: product.description,
     currentPath: "/products",
     user,
@@ -3185,7 +3313,7 @@ function productDetailPage(slug, user = null) {
   const keyFeatures = specs.slice(0, 6);
 
   return layout({
-    title: `${product.name} – MAPLE`,
+    title: `${product.name} – WHITETEAKLLC`,
     description: String(product.description || "").slice(0, 150),
     ogImage: product.image,
     currentPath: "/products",
@@ -3250,7 +3378,7 @@ function productDetailPage(slug, user = null) {
               <label>Deliver to <input type="text" placeholder="Pincode" maxlength="6" value="400049"></label>
               <button type="button">Check</button>
             </div>
-            <p class="pdp2-delivery">Delivery by 16 April · Free shipping above ₹499</p>
+            <p class="pdp2-delivery">Delivery by 16 April · Free shipping above ${currency(499)}</p>
 
             <div class="pdp2-qty">
               <span>Quantity</span>
@@ -3352,8 +3480,8 @@ function productDetailPage(slug, user = null) {
 
 function cartPage(user = null) {
   return layout({
-    title: "Cart – MAPLE",
-    description: "Review items in your MAPLE cart before checkout. Free delivery and easy 30-day returns.",
+    title: "Cart – WHITETEAKLLC",
+    description: "Review items in your WHITETEAKLLC cart before checkout. Free delivery and easy 30-day returns.",
     currentPath: "/cart",
     user,
     content: `
@@ -3402,17 +3530,19 @@ function cartPage(user = null) {
 
 function checkoutPage(user = null) {
   const rzpReady = razorpayConfigured();
+  const ppReady = paypalConfigured();
   return layout({
-    title: "Checkout – MAPLE",
+    title: "Checkout – WHITETEAKLLC",
     description: "Secure checkout with Razorpay test-mode payments, COD fallback, and instant order tracking.",
     currentPath: "/cart",
     user,
     content: `
       ${CR_HIDE_LEGACY_FOOTER_STYLE}
-      <main class="cr-co-shell" data-rzp-ready="${rzpReady ? "1" : "0"}" data-rzp-key="${escapeHtml(RAZORPAY_KEY_ID || "")}">
+      <main class="cr-co-shell" data-rzp-ready="${rzpReady ? "1" : "0"}" data-rzp-key="${escapeHtml(RAZORPAY_KEY_ID || "")}" data-paypal-ready="${ppReady ? "1" : "0"}" data-paypal-client-id="${escapeHtml(PAYPAL_CLIENT_ID || "")}" data-paypal-currency="${escapeHtml(PAYPAL_CURRENCY)}">
         <header class="cr-co-header">
           <h1>Checkout</h1>
         </header>
+        ${!ppReady ? `<div class="eh-banner eh-banner-warn" role="status">PayPal live mode is not configured yet. Add PayPal live Client ID and Secret to .env to enable PayPal checkout.</div>` : `<div class="eh-banner eh-banner-info" role="status">PayPal ${escapeHtml(PAYPAL_MODE)} mode is active. Currency: ${escapeHtml(PAYPAL_CURRENCY)}.</div>`}
         ${!rzpReady ? `<div class="eh-banner eh-banner-warn" role="status">Test mode — add real Razorpay keys to .env to enable live payments.</div>` : `<div class="eh-banner eh-banner-info" role="status">Razorpay test mode is active. Use test cards only.</div>`}
         <div class="eh-banner eh-banner-error" id="eh-pay-error" hidden role="alert"></div>
 
@@ -3463,7 +3593,12 @@ function checkoutPage(user = null) {
             <label class="cr-co-pay-option"><input type="radio" name="pay" value="wise"><span>Wise (Bank Transfer)</span></label>
             <div class="mp-wise-box" data-mp-wise hidden>
               <p><strong>Wise bank transfer instructions</strong></p>
-              <p>Account name: SynapseEngine OÜ<br>Wise email: payments@maple.com<br>Reference: your email on file</p>
+              <p>Account name: Whiteteak LLC<br>Wise email: payments@whiteteakllc.com<br>Reference: your email on file</p>
+            </div>
+            <div class="mp-wise-box" data-paypal-panel hidden>
+              <p><strong>PayPal checkout</strong></p>
+              <p data-paypal-help>${ppReady ? "Continue to review, then pay securely with PayPal." : "PayPal is unavailable until PAYPAL_CLIENT_ID and PAYPAL_SECRET are added to .env."}</p>
+              <div data-paypal-buttons></div>
             </div>
             <div class="cr-co-actions">
               <button type="button" class="cr-co-back" data-cr-back>Back</button>
@@ -3488,7 +3623,7 @@ function checkoutPage(user = null) {
 
 function trackPage(prefill = "", user = null) {
   return layout({
-    title: "Track Order | MAPLE",
+    title: "Track Order | WHITETEAKLLC",
     currentPath: "/track",
     user,
     content: `
@@ -3556,8 +3691,8 @@ function authPage({ message = "", email = "", verified = false, error = "", next
   const nextNotice = next ? `<div class="eo-auth-banner">Please login to access your ${/checkout/i.test(next) ? "checkout" : "cart"}.</div>` : "";
   const loginAction = next ? `/auth/login?next=${encodeURIComponent(next)}` : "/auth/login";
   return layout({
-    title: "Login – MAPLE",
-    description: "Sign in to your MAPLE account to access your cart, orders, and saved items.",
+    title: "Login – WHITETEAKLLC",
+    description: "Sign in to your WHITETEAKLLC account to access your cart, orders, and saved items.",
     currentPath: "/login",
     user,
     content: `
@@ -3599,7 +3734,7 @@ function authPage({ message = "", email = "", verified = false, error = "", next
 
 function signupPage({ message = "", error = "", name = "", email = "" } = {}, user = null) {
   return layout({
-    title: "Sign up | MAPLE",
+    title: "Sign up | WHITETEAKLLC",
     currentPath: "/signup",
     user,
     content: `
@@ -3608,7 +3743,7 @@ function signupPage({ message = "", error = "", name = "", email = "" } = {}, us
         <section class="eo-auth-split">
           <aside class="eo-auth-left eo-auth-left-alt">
             <div class="eo-auth-left-inner">
-              <h2 class="eo-auth-tag">Join MAPLE</h2>
+              <h2 class="eo-auth-tag">Join WHITETEAKLLC</h2>
               <p class="eo-auth-tag-sub">Create your free account in under a minute. Verify via email OTP and start shopping instantly.</p>
               <div class="eo-auth-illus" aria-hidden="true">
                 <span></span><span></span><span></span>
@@ -3647,7 +3782,7 @@ function signupSuccessPage(email, user = null, devInfo = null, opts = {}) {
   ` : "";
   const errorBanner = error ? `<div class="eo-auth-banner eo-auth-error" style="margin-bottom:12px">${escapeHtml(error)}</div>` : "";
   return layout({
-    title: "Verify your email | MAPLE",
+    title: "Verify your email | WHITETEAKLLC",
     currentPath: "/signup",
     user,
     content: `
@@ -3677,7 +3812,7 @@ function signupSuccessPage(email, user = null, devInfo = null, opts = {}) {
 
 function adminLoginPage({ error = "" } = {}) {
   return layout({
-    title: "Admin Login | MAPLE",
+    title: "Admin Login | WHITETEAKLLC",
     currentPath: "/admin/login",
     user: null,
     content: `
@@ -3721,7 +3856,7 @@ function accountPage(user) {
   } catch { wishRows = []; }
   const addr = (globalThis.__mapleCtx && globalThis.__mapleCtx.userAddress) || null;
   return layout({
-    title: "My Account | MAPLE",
+    title: "My Account | WHITETEAKLLC",
     currentPath: "/account",
     user,
     content: `
@@ -4164,15 +4299,15 @@ function adminPage(user = null, opts = {}) {
     `<a class="${section === id && !searchResults ? "is-active" : ""}" href="${href}">${label}</a>`;
 
   return layout({
-    title: "Admin Dashboard – MAPLE",
-    description: "MAPLE admin dashboard — manage products, orders, customers, and users.",
+    title: "Admin Dashboard – WHITETEAKLLC",
+    description: "WHITETEAKLLC admin dashboard — manage products, orders, customers, and users.",
     currentPath: "/admin",
     user,
     content: `
       ${CR_HIDE_LEGACY_FOOTER_STYLE}
       <main class="cr-admin-shell">
         <aside class="cr-admin-sidebar" data-cr-admin-sidebar>
-          <div class="cr-admin-logo">MAPLE <span>Admin</span></div>
+          <div class="cr-admin-logo">WHITETEAKLLC <span>Admin</span></div>
           <nav class="cr-admin-nav">
             ${navItem("/admin?section=dashboard", "Dashboard", "dashboard")}
             ${navItem("/admin?section=products", "Products", "products")}
@@ -4204,23 +4339,23 @@ function adminPage(user = null, opts = {}) {
 
 function aboutPage(user = null) {
   return layout({
-    title: "About Maple",
-    description: "About MAPLE — a direct-to-consumer electronics platform operated by SynapseEngine OÜ.",
+    title: "About WHITETEAKLLC",
+    description: "About WHITETEAKLLC, a direct-to-consumer electronics platform operated by Whiteteak LLC.",
     currentPath: "/about",
     user,
     content: `
       <main class="mp-page mp-about-v2">
         <section class="mp-about-grid">
           <div class="mp-about-col-text">
-            <span class="mp-eyebrow">About MAPLE</span>
+            <span class="mp-eyebrow">About WHITETEAKLLC</span>
             <h1>Technology, made human.</h1>
-            <p class="mp-about-lede">MAPLE is a single-vendor, direct-to-consumer electronics platform operated by <strong>SynapseEngine OÜ</strong>. We showcase, manage, and sell our own catalogue of electronics — not a marketplace, not a reseller network — so we stay accountable for every product, price, and post-purchase interaction.</p>
+            <p class="mp-about-lede">WHITETEAKLLC is a single-vendor, direct-to-consumer electronics platform operated by <strong>Whiteteak LLC</strong>. We showcase, manage, and sell our own catalogue of electronics — not a marketplace, not a reseller network — so we stay accountable for every product, price, and post-purchase interaction.</p>
 
             <h2>Our story</h2>
-            <p>MAPLE began in 2018 with a simple frustration: buying electronics shouldn't feel like decoding a spec sheet. Our founding team was helping a family member pick a laptop for engineering college. Every site repeated the same specs — 15.6" FHD, 8GB DDR4, 512GB SSD — and none answered the one question that actually mattered: <em>"Will this still feel fast two years from now?"</em></p>
-            <p>That evening, over chai in Koramangala, the idea for MAPLE took shape on a paper napkin. What if buying a laptop could feel as clear as buying a pair of running shoes — where the store helps you understand fit, purpose, and trade-offs before you look at the price?</p>
-            <p>Our first product wasn't a laptop. It was a comparison page: twelve models, three use cases, and an honest verdict for each. We shared it in three WhatsApp groups. Within a month, strangers were forwarding it. Within a quarter, customers asked us to sell the products ourselves. By 2023 we'd rebuilt the whole stack on a single thesis: every page on MAPLE should feel like it was designed by someone who actually shops here.</p>
-            <p>In 2025 we incorporated as <strong>SynapseEngine OÜ</strong> in Estonia to give MAPLE a transparent legal home — a stable entity that stands behind every warranty claim, refund, and data-protection request. Our merchant of record, our engineering team, and our customer-support humans all sit under that single roof.</p>
+            <p><strong>Whiteteak LLC</strong> was formed on <strong>29-Feb-2024</strong> in Sharjah Media City, UAE as a Limited Liability Company. WHITETEAKLLC exists to make electronics shopping clear, accountable, and direct from one verified operator.</p>
+            <p>Our business license covers non-specialized wholesale trade and retail sale of products over the internet, which fits the way we serve customers online. The current license is valid until <strong>28-Feb-2026</strong>.</p>
+            <p>From the start, our focus has been simple: a single-vendor electronics store where product information, pricing, payments, orders, support, and post-purchase requests all sit under the same legal entity.</p>
+            <p>We incorporated in the UAE to give WHITETEAKLLC a transparent legal home that stands behind every order, warranty request, refund, and data-protection request.</p>
 
             <h2>Our mission</h2>
             <p>To make great technology simple to choose and delightful to own. Every product we list is verified, every price we publish is honest, and every support conversation is handled by real humans who know the catalogue.</p>
@@ -4229,20 +4364,24 @@ function aboutPage(user = null) {
             <ul class="mp-about-list">
               <li><strong>Single-vendor, single standard.</strong> We own every SKU in our catalogue. No third-party sellers, no inconsistent quality — one standard applies everywhere.</li>
               <li><strong>Genuine only.</strong> We source directly from brands and authorised distributors — zero grey-market stock.</li>
-              <li><strong>Transparent pricing.</strong> Prices in INR, inclusive of GST, with no last-minute surprises at checkout.</li>
-              <li><strong>Real support.</strong> A real human on the other end of <a href="mailto:support@maple.com">support@maple.com</a> — 92% of queries resolved on first contact.</li>
+              <li><strong>Transparent pricing.</strong> Prices in USD, inclusive of applicable taxes where shown, with no last-minute surprises at checkout.</li>
+              <li><strong>Real support.</strong> A real human on the other end of <a href="mailto:support@whiteteakllc.com">support@whiteteakllc.com</a> — 92% of queries resolved on first contact.</li>
               <li><strong>Fair returns.</strong> A simple 30-day return window on eligible items, refunded to the original payment method.</li>
               <li><strong>Secure by default.</strong> TLS in transit, hashed passwords, PCI-compliant payments via Viva Wallet — we never store raw card data.</li>
             </ul>
 
             <h2>How to reach us</h2>
             <ul class="mp-about-list">
-              <li><strong>Legal entity:</strong> SynapseEngine OÜ (Estonia)</li>
-              <li><strong>Registered address:</strong> Harju maakond, Tallinn, Kesklinna linnaosa, Tartu mnt 67/1-13b, 10115</li>
-              <li><strong>Customer support:</strong> <a href="mailto:support@maple.com">support@maple.com</a></li>
-              <li><strong>Admin / business:</strong> <a href="mailto:admin@MapleCoreInc.com">admin@MapleCoreInc.com</a></li>
-              <li><strong>Phone:</strong> +37257052072</li>
-              <li><strong>Governing law:</strong> India · Jurisdiction: Bengaluru, Karnataka</li>
+              <li><strong>Legal entity:</strong> Whiteteak LLC (UAE)</li>
+              <li><strong>Formation date:</strong> 29-Feb-2024</li>
+              <li><strong>Formation no.:</strong> 2428786</li>
+              <li><strong>Business license no.:</strong> 2428786.01</li>
+              <li><strong>License expiry:</strong> 28-Feb-2026</li>
+              <li><strong>Registered address:</strong> Sharjah Media City, Sharjah, UAE</li>
+              <li><strong>Customer support:</strong> <a href="mailto:support@whiteteakllc.com">support@whiteteakllc.com</a></li>
+              <li><strong>Admin / business:</strong> <a href="mailto:admin@whiteteakllc.com">admin@whiteteakllc.com</a></li>
+              <li><strong>Phone:</strong> +971 50 714 3751</li>
+              <li><strong>Governing law:</strong> UAE · Jurisdiction: Sharjah</li>
             </ul>
 
             <p class="mp-about-foot">Related policies: <a href="/terms">Terms &amp; Conditions</a> · <a href="/privacy">Privacy</a> · <a href="/refund">Refund &amp; Returns</a> · <a href="/disclaimer">Disclaimer</a></p>
@@ -4260,8 +4399,8 @@ function aboutPage(user = null) {
 
 function termsPage(user = null) {
   return layout({
-    title: "Terms & Conditions | MAPLE",
-    description: "MAPLE terms and conditions governing use of our website and services.",
+    title: "Terms & Conditions | WHITETEAKLLC",
+    description: "WHITETEAKLLC terms and conditions governing use of our website and services.",
     currentPath: "/terms",
     user,
     content: `
@@ -4269,25 +4408,30 @@ function termsPage(user = null) {
         <section class="mp-page-hero">
           <span class="mp-eyebrow">Last updated: April 2026</span>
           <h1>Terms &amp; Conditions</h1>
-          <p>Welcome to <strong>MAPLE</strong>, operated by <strong>SynapseEngine OÜ</strong> ("Company", "we", "us", or "our"). These Terms &amp; Conditions govern your use of our website, mobile interfaces, and services (collectively, the "Services").</p>
+          <p>Welcome to <strong>WHITETEAKLLC</strong>, operated by <strong>Whiteteak LLC</strong> ("Company", "we", "us", or "our"). These Terms &amp; Conditions govern your use of our website, mobile interfaces, and services (collectively, the "Services").</p>
         </section>
         <section class="mp-prose">
           <h2>1. Acceptance of Terms</h2>
-          <p>By accessing or using MAPLE, you agree to be bound by these Terms &amp; Conditions and our Privacy Policy. If you do not agree, please do not use our Services.</p>
+          <p>By accessing or using WHITETEAKLLC, you agree to be bound by these Terms &amp; Conditions and our Privacy Policy. If you do not agree, please do not use our Services.</p>
           <p>We may update these Terms at any time. Continued use after changes constitutes acceptance.</p>
 
           <h2>2. Company Information</h2>
           <ul>
-            <li><strong>Legal Entity:</strong> SynapseEngine OÜ</li>
-            <li><strong>Registered Country:</strong> Estonia</li>
-            <li><strong>Registered Address:</strong> Harju maakond, Tallinn, Kesklinna linnaosa, Tartu mnt 67/1-13b, 10115</li>
-            <li><strong>Phone:</strong> +37257052072</li>
-            <li><strong>Contact Email:</strong> <a href="mailto:support@maple.com">support@maple.com</a></li>
-            <li><strong>Admin Email:</strong> <a href="mailto:admin@MapleCoreInc.com">admin@MapleCoreInc.com</a></li>
+            <li><strong>Legal Entity:</strong> Whiteteak LLC</li>
+            <li><strong>Registered Country:</strong> UAE</li>
+            <li><strong>Registered Address:</strong> Sharjah Media City, Sharjah, UAE</li>
+            <li><strong>Formation Date:</strong> 29-Feb-2024</li>
+            <li><strong>Formation No.:</strong> 2428786</li>
+            <li><strong>Business License No.:</strong> 2428786.01</li>
+            <li><strong>License Expiry:</strong> 28-Feb-2026</li>
+            <li><strong>Manager:</strong> Muhammad Naeem Ali</li>
+            <li><strong>Phone:</strong> +971 50 714 3751</li>
+            <li><strong>Contact Email:</strong> <a href="mailto:support@whiteteakllc.com">support@whiteteakllc.com</a></li>
+            <li><strong>Admin Email:</strong> <a href="mailto:admin@whiteteakllc.com">admin@whiteteakllc.com</a></li>
           </ul>
 
           <h2>3. Eligibility</h2>
-          <p>You must be at least 18 years old and capable of entering a legally binding contract under applicable law. By using MAPLE, you confirm that all information provided is accurate and that you are purchasing for personal use unless agreed otherwise.</p>
+          <p>You must be at least 18 years old and capable of entering a legally binding contract under applicable law. By using WHITETEAKLLC, you confirm that all information provided is accurate and that you are purchasing for personal use unless agreed otherwise.</p>
 
           <h2>4. Account Responsibility</h2>
           <p>You are responsible for maintaining the confidentiality of your account credentials and for all activities under your account. We may suspend or terminate accounts involved in:</p>
@@ -4302,7 +4446,7 @@ function termsPage(user = null) {
 
           <h2>6. Pricing &amp; Taxes</h2>
           <ul>
-            <li>Prices are listed in INR (₹).</li>
+            <li>Prices are listed in USD ($).</li>
             <li>Inclusive of applicable GST unless stated otherwise.</li>
             <li>Prices may change without prior notice.</li>
           </ul>
@@ -4344,7 +4488,7 @@ function termsPage(user = null) {
           <p>We reserve the right to investigate disputed payments and suspend accounts involved in fraudulent or abusive chargebacks.</p>
 
           <h2>13. Intellectual Property</h2>
-          <p>All content on MAPLE is owned or licensed by SynapseEngine OÜ and protected under applicable laws. Unauthorized use is prohibited.</p>
+          <p>All content on WHITETEAKLLC is owned or licensed by Whiteteak LLC and protected under applicable laws. Unauthorized use is prohibited.</p>
 
           <h2>14. Prohibited Use</h2>
           <p>Users must not:</p>
@@ -4354,27 +4498,27 @@ function termsPage(user = null) {
           <p>To the maximum extent permitted by law, liability is limited to the amount paid for the order. No liability for indirect or consequential damages.</p>
 
           <h2>16. Indemnification</h2>
-          <p>You agree to indemnify and hold harmless SynapseEngine OÜ from claims arising due to misuse of services or violation of these Terms.</p>
+          <p>You agree to indemnify and hold harmless Whiteteak LLC from claims arising due to misuse of services or violation of these Terms.</p>
 
           <h2>17. Privacy</h2>
-          <p>Use of MAPLE is also governed by our <a href="/privacy">Privacy Policy</a>.</p>
+          <p>Use of WHITETEAKLLC is also governed by our <a href="/privacy">Privacy Policy</a>.</p>
 
           <h2>18. Governing Law &amp; Jurisdiction</h2>
-          <p>These Terms are governed by the laws of India. All disputes fall under the jurisdiction of the Courts in Bengaluru, Karnataka. Parties agree to attempt mediation before litigation.</p>
+          <p>These Terms are governed by the applicable laws and regulations of Sharjah Media City Free Zone and the UAE. Disputes fall under the competent jurisdiction of Sharjah, UAE. Parties agree to attempt mediation before litigation.</p>
 
-          <h2>19. Grievance Officer (India Compliance)</h2>
+          <h2>19. Grievance Officer</h2>
           <ul>
             <li><strong>Name:</strong> To be appointed</li>
-            <li><strong>Email:</strong> <a href="mailto:admin@MapleCoreInc.com">admin@MapleCoreInc.com</a></li>
+            <li><strong>Email:</strong> <a href="mailto:admin@whiteteakllc.com">admin@whiteteakllc.com</a></li>
             <li><strong>Response Time:</strong> 7–15 business days</li>
           </ul>
 
           <h2>20. Contact Us</h2>
           <p>For support or inquiries:</p>
           <ul>
-            <li>📧 <a href="mailto:support@maple.com">support@maple.com</a></li>
-            <li>📧 <a href="mailto:admin@MapleCoreInc.com">admin@MapleCoreInc.com</a></li>
-            <li>📞 +37257052072</li>
+            <li>📧 <a href="mailto:support@whiteteakllc.com">support@whiteteakllc.com</a></li>
+            <li>📧 <a href="mailto:admin@whiteteakllc.com">admin@whiteteakllc.com</a></li>
+            <li>📞 +971 50 714 3751</li>
           </ul>
         </section>
       </main>
@@ -4384,8 +4528,8 @@ function termsPage(user = null) {
 
 function privacyPage(user = null) {
   return layout({
-    title: "Privacy Policy | MAPLE",
-    description: "How MAPLE collects, uses and protects your personal data.",
+    title: "Privacy Policy | WHITETEAKLLC",
+    description: "How WHITETEAKLLC collects, uses and protects your personal data.",
     currentPath: "/privacy",
     user,
     content: `
@@ -4399,10 +4543,13 @@ function privacyPage(user = null) {
           <h2>1. Company Information</h2>
           <p>This Privacy Policy applies to services operated by:</p>
           <ul>
-            <li><strong>SynapseEngine OÜ</strong></li>
-            <li><strong>Registered Address:</strong> Harju maakond, Tallinn, Kesklinna linnaosa, Tartu mnt 67/1-13b, 10115, Estonia</li>
-            <li><strong>Phone:</strong> +37257052072</li>
-            <li><strong>Email:</strong> <a href="mailto:support@maple.com">support@maple.com</a></li>
+            <li><strong>Whiteteak LLC</strong></li>
+            <li><strong>Registered Address:</strong> Sharjah Media City, Sharjah, UAE</li>
+            <li><strong>Formation Date:</strong> 29-Feb-2024</li>
+            <li><strong>Business License No.:</strong> 2428786.01</li>
+            <li><strong>License Expiry:</strong> 28-Feb-2026</li>
+            <li><strong>Phone:</strong> +971 50 714 3751</li>
+            <li><strong>Email:</strong> <a href="mailto:support@whiteteakllc.com">support@whiteteakllc.com</a></li>
           </ul>
 
           <h2>2. Data We Collect</h2>
@@ -4452,7 +4599,7 @@ function privacyPage(user = null) {
           <p>All partners operate under strict data-processing agreements.</p>
 
           <h2>8. International Data Transfers</h2>
-          <p>As a global business, your data may be processed outside your country, including in Estonia. We ensure appropriate safeguards are in place, such as secure infrastructure, contractual protections, and trusted service providers.</p>
+          <p>As an online business, your data may be processed outside your country, including in the UAE and India. We ensure appropriate safeguards are in place, such as secure infrastructure, contractual protections, and trusted service providers.</p>
 
           <h2>9. Security</h2>
           <p>We implement:</p>
@@ -4479,7 +4626,7 @@ function privacyPage(user = null) {
             <li>Request deletion</li>
             <li>Request data portability</li>
           </ul>
-          <p>Contact: <a href="mailto:support@maple.com">support@maple.com</a>. Response time: within 30 days.</p>
+          <p>Contact: <a href="mailto:support@whiteteakllc.com">support@whiteteakllc.com</a>. Response time: within 30 days.</p>
 
           <h2>12. Children's Privacy</h2>
           <p>Our services are not intended for children under 13. We do not knowingly collect such data.</p>
@@ -4492,9 +4639,9 @@ function privacyPage(user = null) {
 
           <h2>15. Contact &amp; Data Protection Officer</h2>
           <ul>
-            <li><strong>Data Protection Officer:</strong> <a href="mailto:admin@MapleCoreInc.com">admin@MapleCoreInc.com</a></li>
-            <li><strong>Support:</strong> <a href="mailto:support@maple.com">support@maple.com</a></li>
-            <li><strong>Phone:</strong> +37257052072</li>
+            <li><strong>Data Protection Officer:</strong> <a href="mailto:admin@whiteteakllc.com">admin@whiteteakllc.com</a></li>
+            <li><strong>Support:</strong> <a href="mailto:support@whiteteakllc.com">support@whiteteakllc.com</a></li>
+            <li><strong>Phone:</strong> +971 50 714 3751</li>
           </ul>
         </section>
       </main>
@@ -4504,8 +4651,8 @@ function privacyPage(user = null) {
 
 function disclaimerPage(user = null) {
   return layout({
-    title: "Disclaimer | MAPLE",
-    description: "Disclaimer regarding product information, pricing and third-party links on MAPLE.",
+    title: "Disclaimer | WHITETEAKLLC",
+    description: "Disclaimer regarding product information, pricing and third-party links on WHITETEAKLLC.",
     currentPath: "/disclaimer",
     user,
     content: `
@@ -4513,20 +4660,23 @@ function disclaimerPage(user = null) {
         <section class="mp-page-hero">
           <span class="mp-eyebrow">Last updated: April 2026</span>
           <h1>Disclaimer</h1>
-          <p>Important notes about the information shown on MAPLE.</p>
+          <p>Important notes about the information shown on WHITETEAKLLC.</p>
         </section>
         <section class="mp-prose">
           <h2>1. Company Information</h2>
           <p>This website is operated by:</p>
           <ul>
-            <li><strong>SynapseEngine OÜ</strong></li>
-            <li><strong>Registered Address:</strong> Harju maakond, Tallinn, Kesklinna linnaosa, Tartu mnt 67/1-13b, 10115, Estonia</li>
-            <li><strong>Phone:</strong> +37257052072</li>
-            <li><strong>Email:</strong> <a href="mailto:support@maple.com">support@maple.com</a></li>
+            <li><strong>Whiteteak LLC</strong></li>
+            <li><strong>Registered Address:</strong> Sharjah Media City, Sharjah, UAE</li>
+            <li><strong>Formation Date:</strong> 29-Feb-2024</li>
+            <li><strong>Business License No.:</strong> 2428786.01</li>
+            <li><strong>License Expiry:</strong> 28-Feb-2026</li>
+            <li><strong>Phone:</strong> +971 50 714 3751</li>
+            <li><strong>Email:</strong> <a href="mailto:support@whiteteakllc.com">support@whiteteakllc.com</a></li>
           </ul>
 
           <h2>2. Product Information</h2>
-          <p>Product descriptions, images, specifications, and features on MAPLE are based on manufacturer data, official materials, and internal editorial inputs. While we aim for accuracy:</p>
+          <p>Product descriptions, images, specifications, and features on WHITETEAKLLC are based on manufacturer data, official materials, and internal editorial inputs. While we aim for accuracy:</p>
           <ul>
             <li>Manufacturers may change specifications without notice</li>
             <li>Region-specific variants may differ</li>
@@ -4535,7 +4685,7 @@ function disclaimerPage(user = null) {
           <p>For final and binding details, always refer to the official brand website and physical product packaging.</p>
 
           <h2>3. Pricing Accuracy</h2>
-          <p>We strive to maintain accurate pricing at all times. However, in case of typographical errors, system glitches, or incorrect currency conversions, MAPLE reserves the right to:</p>
+          <p>We strive to maintain accurate pricing at all times. However, in case of typographical errors, system glitches, or incorrect currency conversions, WHITETEAKLLC reserves the right to:</p>
           <ul>
             <li>Cancel affected orders</li>
             <li>Refuse processing</li>
@@ -4546,7 +4696,7 @@ function disclaimerPage(user = null) {
           <p>All products are subject to availability. We reserve the right to discontinue products, limit quantities, or cancel orders due to stock issues.</p>
 
           <h2>5. Third-Party Links</h2>
-          <p>MAPLE may include links to third-party websites such as brand manuals, warranty portals, and payment providers including Viva Wallet. We do not control or guarantee:</p>
+          <p>WHITETEAKLLC may include links to third-party websites such as brand manuals, warranty portals, and payment providers including Viva Wallet. We do not control or guarantee:</p>
           <ul>
             <li>Content accuracy</li>
             <li>Privacy practices</li>
@@ -4561,7 +4711,7 @@ function disclaimerPage(user = null) {
           <p>Unless explicitly stated:</p>
           <ul>
             <li>Warranties are provided by the product manufacturer</li>
-            <li>MAPLE is not the warranty provider</li>
+            <li>WHITETEAKLLC is not the warranty provider</li>
           </ul>
           <p>We may assist with claims, but terms and coverage are defined by the manufacturer. Customers should retain their invoice and packaging.</p>
 
@@ -4569,10 +4719,10 @@ function disclaimerPage(user = null) {
           <p>Images are for representation only. Actual products may vary due to lighting, display settings, or manufacturer updates.</p>
 
           <h2>9. Product Compatibility</h2>
-          <p>Customers are responsible for ensuring compatibility with devices and correct specifications before purchase. MAPLE is not liable for incompatibility issues.</p>
+          <p>Customers are responsible for ensuring compatibility with devices and correct specifications before purchase. WHITETEAKLLC is not liable for incompatibility issues.</p>
 
           <h2>10. Limitation of Liability</h2>
-          <p>To the maximum extent permitted by law, MAPLE (SynapseEngine OÜ) shall not be liable for:</p>
+          <p>To the maximum extent permitted by law, WHITETEAKLLC (Whiteteak LLC) shall not be liable for:</p>
           <ul>
             <li>Inaccuracies in product information</li>
             <li>Third-party content or links</li>
@@ -4589,8 +4739,8 @@ function disclaimerPage(user = null) {
           <h2>13. Contact</h2>
           <p>For questions or discrepancies:</p>
           <ul>
-            <li>📧 <a href="mailto:support@maple.com">support@maple.com</a></li>
-            <li>📞 +37257052072</li>
+            <li>📧 <a href="mailto:support@whiteteakllc.com">support@whiteteakllc.com</a></li>
+            <li>📞 +971 50 714 3751</li>
           </ul>
         </section>
       </main>
@@ -4600,8 +4750,8 @@ function disclaimerPage(user = null) {
 
 function refundPage(user = null) {
   return layout({
-    title: "Refund & Returns | MAPLE",
-    description: "Maple's refund, returns, and exchange policy.",
+    title: "Refund & Returns | WHITETEAKLLC",
+    description: "WHITETEAKLLC's refund, returns, and exchange policy.",
     currentPath: "/refund",
     user,
     content: `
@@ -4615,10 +4765,13 @@ function refundPage(user = null) {
           <h2>1. Company Information</h2>
           <p>This policy is operated by:</p>
           <ul>
-            <li><strong>SynapseEngine OÜ</strong></li>
-            <li><strong>Registered Address:</strong> Harju maakond, Tallinn, Kesklinna linnaosa, Tartu mnt 67/1-13b, 10115, Estonia</li>
-            <li><strong>Phone:</strong> +37257052072</li>
-            <li><strong>Email:</strong> <a href="mailto:support@maple.com">support@maple.com</a></li>
+            <li><strong>Whiteteak LLC</strong></li>
+            <li><strong>Registered Address:</strong> Sharjah Media City, Sharjah, UAE</li>
+            <li><strong>Formation Date:</strong> 29-Feb-2024</li>
+            <li><strong>Business License No.:</strong> 2428786.01</li>
+            <li><strong>License Expiry:</strong> 28-Feb-2026</li>
+            <li><strong>Phone:</strong> +971 50 714 3751</li>
+            <li><strong>Email:</strong> <a href="mailto:support@whiteteakllc.com">support@whiteteakllc.com</a></li>
           </ul>
 
           <h2>2. 30-Day Return Window</h2>
@@ -4653,7 +4806,7 @@ function refundPage(user = null) {
             <li>Choose reason</li>
           </ol>
           <p><strong>Reverse pickup:</strong> scheduled within 24–72 hours.</p>
-          <p><strong>Remote locations:</strong> self-ship allowed, reimbursement up to ₹200 (on approval).</p>
+          <p><strong>Remote locations:</strong> self-ship allowed, reimbursement up to ${currency(200)} (on approval).</p>
 
           <h2>6. Refund Process &amp; Timelines</h2>
           <ul>
@@ -4710,8 +4863,8 @@ function refundPage(user = null) {
           <h2>14. Contact</h2>
           <p>Need help?</p>
           <ul>
-            <li>📧 <a href="mailto:support@maple.com">support@maple.com</a></li>
-            <li>📞 +37257052072</li>
+            <li>📧 <a href="mailto:support@whiteteakllc.com">support@whiteteakllc.com</a></li>
+            <li>📞 +971 50 714 3751</li>
           </ul>
         </section>
       </main>
@@ -4730,8 +4883,8 @@ function wishlistPage(user) {
     `).all(user.email).map(normalizeProduct);
   } catch { rows = []; }
   return layout({
-    title: "My Wishlist | MAPLE",
-    description: "Your saved wishlist products on MAPLE.",
+    title: "My Wishlist | WHITETEAKLLC",
+    description: "Your saved wishlist products on WHITETEAKLLC.",
     currentPath: "/wishlist",
     user,
     content: `
@@ -4768,28 +4921,24 @@ function wishlistPage(user) {
 
 function storyPage(user = null) {
   return layout({
-    title: "Maple Story",
-    description: "The story behind MAPLE.",
+    title: "WHITETEAKLLC Story",
+    description: "The story behind WHITETEAKLLC.",
     currentPath: "/story",
     user,
     content: `
       <main class="mp-page">
-        <section class="mp-page-hero mp-story-hero"><h1>Our Story</h1><p>Why we started Maple, and where we're going next.</p></section>
+        <section class="mp-page-hero mp-story-hero"><h1>Our Story</h1><p>Whiteteak LLC's verified business story and ecommerce focus.</p></section>
         <section class="mp-prose mp-story-prose">
-          <h2>It started with a frustration</h2>
-          <p>Maple began in 2018 with a simple frustration: buying electronics shouldn't feel like decoding a spec sheet. Our founding team was trying to pick out a laptop for a family member heading into engineering college. Every site told them the same thing — a 15.6" FHD IPS display, 8GB DDR4, 512GB NVMe SSD — and absolutely none of it answered the one question that actually mattered: "Will this laptop still feel fast two years from now?"</p>
-          <p>That evening, over chai at a small kiosk in Koramangala, the idea for Maple took shape on the back of a paper napkin. What if buying a laptop could feel as clear as buying a pair of running shoes — where the store helps you understand fit, purpose, and trade-offs before you even look at the price?</p>
-          <blockquote>"We didn't want to build another marketplace. We wanted to build a store where a 19-year-old and her 60-year-old grandfather could both walk away confident in what they just bought."</blockquote>
-          <h2>Our first product</h2>
-          <p>Our first product wasn't a laptop. It was a curated comparison page. Twelve laptops, three use cases, and a single honest verdict for each. We put it up on a free domain and shared the link in three WhatsApp groups. Within a week, people we'd never met were forwarding it to their friends. Within a month, manufacturers started asking to be listed. Within a quarter, we had our first paying customers asking if we'd just sell the thing to them directly.</p>
-          <h2>Growing pains</h2>
-          <p>The next two years were exactly as messy as every founder story claims. We onboarded the wrong inventory partner and lost six weeks of Diwali sales. We launched a mobile app that crashed on half of our users' phones and had to rewrite it from scratch. We hired too fast in 2021, then had to have the hardest conversations of our careers in early 2022. Each of those moments taught us something we couldn't have learned any other way: that honesty scales further than hustle, that slow software kills trust faster than high prices, and that the quality of a team matters far more than its size.</p>
-          <p>By 2023 we'd rebuilt the entire stack on a single thesis: every experience on Maple — the homepage, the product page, the checkout, the support chat — should feel like it was designed by someone who actually shops here.</p>
-          <h2>Today</h2>
-          <p>Today, Maple serves customers across all twenty-eight states and eight union territories. We list over ten thousand products across laptops, mobiles, headphones, wearables and accessories. Our editorial team publishes weekly buying guides, our support team resolves over 92% of queries on first contact, and our logistics partners deliver to more than 18,000 pincodes. None of those numbers are what we're proudest of — we're proudest of the handwritten notes our customers send us, and the fact that nearly seven out of ten Maple customers come back within twelve months.</p>
+          <h2>Formation</h2>
+          <p><strong>Whiteteak LLC</strong> was formed on <strong>29-Feb-2024</strong> as a Limited Liability Company in Sharjah Media City, Sharjah, UAE.</p>
+          <p>Our formation number is <strong>2428786</strong> and our business license number is <strong>2428786.01</strong>. The current business license is valid until <strong>28-Feb-2026</strong>.</p>
+          <h2>What we do</h2>
+          <p>The company is licensed for non-specialized wholesale trade and retail sale of products over the internet. WHITETEAKLLC uses that legal base to operate a direct-to-consumer electronics store with one accountable operator behind every order.</p>
+          <blockquote>"One company, one catalogue, one standard of accountability."</blockquote>
+          <h2>Our operating promise</h2>
+          <p>We keep product information, pricing, order support, refunds, and customer communication under Whiteteak LLC so customers know exactly who is responsible for the service they receive.</p>
           <h2>Where we're going</h2>
-          <p>Our vision for the next five years is ambitious and, we think, worth the work. We want Maple to be the store that Indian families turn to first — not because we're the cheapest or the flashiest, but because we're the most trustworthy. We're investing heavily in three areas: deeper editorial content so buyers have a real guide, not just a filter; better after-sales service including in-home setup and repair; and a small but growing lineup of Maple-designed accessories built specifically for how Indians actually use technology every day.</p>
-          <p>We know we won't get everything right. But we'll keep doing the thing that got us here — listening to our customers, telling the truth about what we sell, and earning trust one order at a time.</p>
+          <p>In 2026, our focus is to keep the website current with verified company details, clear product information, reliable checkout, and support channels that customers can trust.</p>
         </section>
       </main>
     `
@@ -4798,20 +4947,21 @@ function storyPage(user = null) {
 
 function storeLocatorPage(user = null) {
   return layout({
-    title: "Store Locator | Maple",
+    title: "Store Locator | WHITETEAKLLC",
     currentPath: "/store-locator",
     user,
     content: `
       <main class="mp-page">
-        <section class="mp-page-hero"><h1>Store Locator</h1><p>Find a Maple store near you.</p></section>
+        <section class="mp-page-hero"><h1>Office Location</h1><p>Registered company address for Whiteteak LLC.</p></section>
         <section class="mp-store-grid">
           <article class="mp-store-card">
-            <h3>Maple Bengaluru Flagship</h3>
-            <p>101, Residency Road, Bengaluru, Karnataka 560025</p>
-            <p><strong>Hours:</strong> Mon–Sun, 10:00 AM – 9:30 PM</p>
-            <p><strong>Phone:</strong> <a href="tel:+919999999999">+91 9999999999</a></p>
+            <h3>Whiteteak LLC</h3>
+            <p>Sharjah Media City, Sharjah, UAE</p>
+            <p><strong>Formation date:</strong> 29-Feb-2024</p>
+            <p><strong>License no.:</strong> 2428786.01</p>
+            <p><strong>Phone:</strong> <a href="tel:+971507143751">+971 50 714 3751</a></p>
           </article>
-          <iframe src="https://www.google.com/maps?q=Bangalore&output=embed" width="100%" height="400" style="border:0;border-radius:16px" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Maple Bengaluru"></iframe>
+          <iframe src="https://www.google.com/maps?q=Sharjah+Media+City&output=embed" width="100%" height="400" style="border:0;border-radius:16px" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Whiteteak LLC Sharjah Media City"></iframe>
         </section>
       </main>
     `
@@ -4820,18 +4970,19 @@ function storeLocatorPage(user = null) {
 
 function contactPage(user = null) {
   return layout({
-    title: "Contact Us | Maple",
+    title: "Contact Us | WHITETEAKLLC",
     currentPath: "/contact",
     user,
     content: `
       <main class="mp-page mp-contact">
         <div class="mp-contact-grid">
           <section class="mp-contact-left">
-            <h1>Talk to Maple</h1>
+            <h1>Talk to WHITETEAKLLC</h1>
             <p>We respond within a few hours on weekdays.</p>
-            <p><strong>Email:</strong> <a href="mailto:support@maple.com">support@maple.com</a></p>
-            <p><strong>Phone:</strong> <a href="tel:+919999999999">+91 9999999999</a></p>
-            <iframe src="https://www.google.com/maps?q=Bangalore&output=embed" width="100%" height="260" style="border:0;border-radius:14px;margin-top:16px" loading="lazy" title="Maple HQ"></iframe>
+            <p><strong>Email:</strong> <a href="mailto:support@whiteteakllc.com">support@whiteteakllc.com</a></p>
+            <p><strong>Phone:</strong> <a href="tel:+971507143751">+971 50 714 3751</a></p>
+            <p><strong>Address:</strong> Sharjah Media City, Sharjah, UAE</p>
+            <iframe src="https://www.google.com/maps?q=Sharjah+Media+City&output=embed" width="100%" height="260" style="border:0;border-radius:14px;margin-top:16px" loading="lazy" title="WHITETEAKLLC HQ"></iframe>
           </section>
           <section class="mp-contact-right">
             <form class="mp-contact-form" data-mp-contact-form>
@@ -4857,23 +5008,23 @@ function contactPage(user = null) {
 function servicesPage(user = null) {
   const services = [
     { t: "Repair", d: "Authorised repair for major brands with transparent quotes and genuine parts across laptops, mobiles and audio." },
-    { t: "Trade-in", d: "Exchange your old device for Maple credit instantly — free pickup and fair valuations." },
+    { t: "Trade-in", d: "Exchange your old device for WHITETEAKLLC credit instantly — free pickup and fair valuations." },
     { t: "EMI Help", d: "Find the right EMI plan — bank cards, cardless, and no-cost EMI on eligible products across price bands." }
   ];
   return layout({
-    title: "Services | Maple",
+    title: "Services | WHITETEAKLLC",
     currentPath: "/services",
     user,
     content: `
       <main class="mp-page">
-        <section class="mp-page-hero"><h1>Maple Services</h1><p>End-to-end support before and after your purchase.</p></section>
+        <section class="mp-page-hero"><h1>WHITETEAKLLC Services</h1><p>End-to-end support before and after your purchase.</p></section>
         <section class="mp-services-grid">
           ${services.map(s => `<article class="mp-service-card"><h3>${escapeHtml(s.t)}</h3><p>${escapeHtml(s.d)}</p></article>`).join("")}
         </section>
         <section class="mp-prose">
           <h3>Need to reach us?</h3>
-          <p>Admin: <a href="mailto:admin@MapleCoreInc.com">admin@MapleCoreInc.com</a></p>
-          <p>Support: <a href="mailto:support@maple.com">support@maple.com</a></p>
+          <p>Admin: <a href="mailto:admin@whiteteakllc.com">admin@whiteteakllc.com</a></p>
+          <p>Support: <a href="mailto:support@whiteteakllc.com">support@whiteteakllc.com</a></p>
         </section>
       </main>
     `
@@ -5735,7 +5886,7 @@ async function handleRequest(req, res) {
     return;
   }
 
-  // === Maple new pages ===
+  // === WHITETEAKLLC new pages ===
   if (req.method === "GET" && pathname === "/about") { html(res, 200, aboutPage(currentUser)); return; }
   if (req.method === "GET" && pathname === "/contact") { html(res, 200, contactPage(currentUser)); return; }
   if (req.method === "GET" && pathname === "/services") { html(res, 200, servicesPage(currentUser)); return; }
@@ -5804,7 +5955,7 @@ async function handleRequest(req, res) {
       if (!name || !email || !subject || !message) { json(res, 400, { error: "Missing fields" }); return; }
       db.prepare("INSERT INTO contact_messages (name, email, phone, subject, message, created_at) VALUES (?, ?, ?, ?, ?, ?)")
         .run(String(name), String(email).toLowerCase(), String(phone), String(subject), String(message), new Date().toISOString());
-      try { await sendOtpEmail("admin@MapleCoreInc.com", `CONTACT from ${email}: ${subject}`); } catch { /* optional */ }
+      try { await sendOtpEmail("admin@whiteteakllc.com", `CONTACT from ${email}: ${subject}`); } catch { /* optional */ }
       json(res, 200, { ok: true });
       return;
     } catch (e) { json(res, 400, { error: e.message }); return; }
@@ -5857,8 +6008,88 @@ async function handleRequest(req, res) {
     } catch (e) { json(res, 400, { error: e.message }); return; }
   }
 
-  // Payment stubs
-  if (req.method === "POST" && pathname.startsWith("/api/payment/") && (pathname.endsWith("/create-session") || pathname.endsWith("/create-order") || pathname.endsWith("/wise/confirm"))) {
+  if (req.method === "POST" && pathname === "/api/payment/paypal/create-order") {
+    try {
+      if (!paypalConfigured()) {
+        json(res, 503, { error: "PayPal not configured. Add PAYPAL_CLIENT_ID and PAYPAL_SECRET to .env." });
+        return;
+      }
+      const payload = JSON.parse(await readBody(req) || "{}");
+      const o = payload.order || payload;
+      const cookies = parseCookies(req);
+      const sessTok = cookies.session_token || "guest-" + (req.headers["x-forwarded-for"] || "anon");
+      const verified = db.prepare("SELECT * FROM checkout_email_otps WHERE session_token = ? AND email = ? AND verified = 1 ORDER BY id DESC LIMIT 1").get(sessTok, String(o.email || "").toLowerCase());
+      if (!verified) { json(res, 400, { error: "Email not verified. Please verify your email before paying." }); return; }
+      const { total } = validateCheckoutOrderPayload(o);
+      const paypalOrder = await createPayPalOrder(total);
+      json(res, 200, { ok: true, paypalOrderId: paypalOrder.id });
+      return;
+    } catch (e) {
+      json(res, 400, { error: e.message || "Could not create PayPal order" });
+      return;
+    }
+  }
+
+  if (req.method === "POST" && pathname === "/api/payment/paypal/capture-order") {
+    try {
+      if (!paypalConfigured()) {
+        json(res, 503, { error: "PayPal not configured. Add PAYPAL_CLIENT_ID and PAYPAL_SECRET to .env." });
+        return;
+      }
+      const payload = JSON.parse(await readBody(req) || "{}");
+      const paypalOrderId = String(payload.paypalOrderId || "");
+      const o = payload.order || {};
+      if (!paypalOrderId) { json(res, 400, { error: "Missing PayPal order id" }); return; }
+
+      const cookies = parseCookies(req);
+      const sessTok = cookies.session_token || "guest-" + (req.headers["x-forwarded-for"] || "anon");
+      const verified = db.prepare("SELECT * FROM checkout_email_otps WHERE session_token = ? AND email = ? AND verified = 1 ORDER BY id DESC LIMIT 1").get(sessTok, String(o.email || "").toLowerCase());
+      if (!verified) { json(res, 400, { error: "Email not verified. Please verify your email before paying." }); return; }
+
+      const { items, total } = validateCheckoutOrderPayload(o);
+      const capture = await capturePayPalOrder(paypalOrderId);
+      if (capture.status !== "COMPLETED") {
+        json(res, 400, { error: `PayPal capture not completed (${capture.status || "unknown"})` });
+        return;
+      }
+      const capturedAmount = capture.purchase_units?.[0]?.payments?.captures?.[0]?.amount;
+      if (capturedAmount && capturedAmount.currency_code !== PAYPAL_CURRENCY) {
+        json(res, 400, { error: "PayPal currency mismatch" });
+        return;
+      }
+      if (capturedAmount && Math.abs(Number(capturedAmount.value) - Number(paypalAmountFromInr(total))) > 0.01) {
+        json(res, 400, { error: "PayPal amount mismatch" });
+        return;
+      }
+
+      const orderCode = `ORD-${1000 + Number(db.prepare("SELECT COUNT(*) AS count FROM orders").get().count) + 1}`;
+      db.prepare(`INSERT INTO orders (order_code, customer_name, email, phone, address, city, state, pincode, status, total, items_json, created_at, payment_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        orderCode,
+        o.customerName,
+        String(o.email).toLowerCase(),
+        o.phone,
+        o.address,
+        o.city,
+        o.state,
+        o.pincode,
+        "Paid",
+        total,
+        JSON.stringify(items),
+        new Date().toISOString(),
+        "paypal"
+      );
+      const reduceStock = db.prepare("UPDATE products SET stock = stock - ? WHERE id = ?");
+      for (const item of items) reduceStock.run(item.quantity, item.id);
+      json(res, 200, { ok: true, orderCode, checkoutUrl: `/order-success/${encodeURIComponent(orderCode)}`, redirect: `/order-success/${encodeURIComponent(orderCode)}` });
+      return;
+    } catch (e) {
+      json(res, 400, { error: e.message || "Could not capture PayPal order" });
+      return;
+    }
+  }
+
+  // Payment fallbacks for non-PayPal providers that are not fully integrated yet.
+  if (req.method === "POST" && pathname.startsWith("/api/payment/") && (pathname.endsWith("/create-session") || pathname.endsWith("/wise/confirm"))) {
     try {
       const payload = JSON.parse(await readBody(req) || "{}");
       const provider = pathname.includes("stripe") ? "stripe" : pathname.includes("paypal") ? "paypal" : "wise";
@@ -5998,7 +6229,7 @@ module.exports = async (req, res) => {
 if (!IS_VERCEL) {
   initialize().then(() => {
     server.listen(PORT, () => {
-      console.log(`MAPLE running at http://localhost:${PORT}`);
+      console.log(`WHITETEAKLLC running at http://localhost:${PORT}`);
     });
   }).catch((error) => {
     console.error(error);

@@ -34,6 +34,8 @@
   }
 
   const CART_KEY = "electrohub-cart";
+  const STORE_CURRENCY = "USD";
+  const STORE_INR_TO_USD_RATE = 0.012;
 
   function readCart() {
     try {
@@ -49,11 +51,12 @@
   }
 
   function formatCurrency(value) {
-    return new Intl.NumberFormat("en-IN", {
+    const displayValue = STORE_CURRENCY === "USD" ? Number(value || 0) * STORE_INR_TO_USD_RATE : Number(value || 0);
+    return new Intl.NumberFormat(STORE_CURRENCY === "USD" ? "en-US" : "en-IN", {
       style: "currency",
-      currency: "INR",
-      maximumFractionDigits: 0
-    }).format(value);
+      currency: STORE_CURRENCY,
+      maximumFractionDigits: STORE_CURRENCY === "USD" ? 2 : 0
+    }).format(displayValue);
   }
 
   function updateCartCount() {
@@ -771,6 +774,8 @@
     }
 
     form.addEventListener("submit", async function (event) {
+      var payVal = (form.querySelector('input[name=pay]:checked') || {}).value || "cod";
+      if (payVal !== "stripe") return;
       event.preventDefault();
       event.stopImmediatePropagation();
       hideError();
@@ -1076,6 +1081,12 @@
     var statusEl = shell.querySelector("[data-mp-verify-status]");
     var changeLink = shell.querySelector("[data-mp-change-email]");
     var wise = shell.querySelector("[data-mp-wise]");
+    var paypalPanel = shell.querySelector("[data-paypal-panel]");
+    var paypalButtons = shell.querySelector("[data-paypal-buttons]");
+    var paypalReady = shell.getAttribute("data-paypal-ready") === "1";
+    var paypalClientId = shell.getAttribute("data-paypal-client-id") || "";
+    var paypalCurrency = shell.getAttribute("data-paypal-currency") || "USD";
+    var paypalRendered = false;
     var verified = false;
     function setStatus(t, err) { if (!statusEl) return; statusEl.textContent = t || ""; statusEl.classList.toggle("is-error", !!err); }
     function lock(e) {
@@ -1112,10 +1123,101 @@
       sendBtn.hidden = false; codeEl.hidden = true; codeEl.value = ""; verifyBtn.hidden = true;
       changeLink.hidden = true; verified = false; setStatus("", false);
     });
-    // Wise panel toggle
+    function getCheckoutOrder() {
+      var data = Object.fromEntries(new FormData(form).entries());
+      var cart = [];
+      try { cart = JSON.parse(localStorage.getItem("electrohub-cart") || "[]"); } catch (_) {}
+      return {
+        customerName: data.customerName,
+        email: data.email,
+        phone: data.phone,
+        address: data.address,
+        city: data.city,
+        state: data.state,
+        pincode: data.pincode,
+        items: cart.map(function (c) { return { id: c.id, quantity: c.quantity }; })
+      };
+    }
+
+    function loadPayPalSdk() {
+      return new Promise(function (resolve, reject) {
+        if (window.paypal) { resolve(); return; }
+        if (!paypalClientId) { reject(new Error("PayPal client id is missing.")); return; }
+        var s = document.createElement("script");
+        s.src = "https://www.paypal.com/sdk/js?client-id=" + encodeURIComponent(paypalClientId) + "&currency=" + encodeURIComponent(paypalCurrency) + "&intent=capture";
+        s.onload = function () { resolve(); };
+        s.onerror = function () { reject(new Error("Could not load PayPal checkout. Check your internet connection and PayPal client id.")); };
+        document.head.appendChild(s);
+      });
+    }
+
+    function renderPayPalButtons() {
+      if (!paypalPanel || !paypalButtons || paypalRendered) return;
+      if (!paypalReady) return;
+      paypalRendered = true;
+      loadPayPalSdk().then(function () {
+        return window.paypal.Buttons({
+          style: { layout: "vertical", shape: "rect", label: "paypal" },
+          onClick: function () {
+            if (!form.reportValidity()) return false;
+            if (!verified) {
+              setStatus("Please verify your email before paying with PayPal.", true);
+              return false;
+            }
+            var cart = [];
+            try { cart = JSON.parse(localStorage.getItem("electrohub-cart") || "[]"); } catch (_) {}
+            if (!cart.length) {
+              setStatus("Your cart is empty.", true);
+              return false;
+            }
+            return true;
+          },
+          createOrder: function () {
+            return fetch("/api/payment/paypal/create-order", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ order: getCheckoutOrder() })
+            }).then(function (r) {
+              return r.json().then(function (j) {
+                if (!r.ok) throw new Error(j.error || "Could not create PayPal order");
+                return j.paypalOrderId;
+              });
+            });
+          },
+          onApprove: function (data) {
+            setStatus("Capturing PayPal payment...", false);
+            return fetch("/api/payment/paypal/capture-order", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ paypalOrderId: data.orderID, order: getCheckoutOrder() })
+            }).then(function (r) {
+              return r.json().then(function (j) { return { ok: r.ok, j: j }; });
+            }).then(function (res) {
+              if (!res.ok || !res.j.ok) throw new Error(res.j.error || "PayPal capture failed");
+              try { localStorage.setItem("electrohub-cart", "[]"); } catch (_) {}
+              location.href = res.j.checkoutUrl || res.j.redirect;
+            }).catch(function (err) {
+              setStatus("PayPal payment failed: " + err.message, true);
+            });
+          },
+          onError: function (err) {
+            setStatus("PayPal error: " + ((err && err.message) || "Unable to complete payment."), true);
+          },
+          onCancel: function () {
+            setStatus("PayPal payment cancelled. You can retry when ready.", true);
+          }
+        }).render(paypalButtons);
+      }).catch(function (err) {
+        setStatus(err.message, true);
+      });
+    }
+
+    // Payment panels toggle
     shell.addEventListener("change", function (e) {
       if (e.target && e.target.name === "pay") {
         if (wise) wise.hidden = e.target.value !== "wise";
+        if (paypalPanel) paypalPanel.hidden = e.target.value !== "paypal";
+        if (e.target.value === "paypal") renderPayPalButtons();
       }
     });
     // Intercept "Place Order" to route through the right payment endpoint
@@ -1125,12 +1227,15 @@
       var payVal = (form.querySelector('input[name=pay]:checked') || {}).value || "cod";
       if (payVal === "cod") return; // fall through to existing flow
       if (!verified) { e.preventDefault(); e.stopPropagation(); setStatus("Please verify your email before paying.", true); return; }
+      if (payVal === "paypal") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (paypalReady) renderPayPalButtons();
+        setStatus(paypalReady ? "Use the PayPal button above to complete payment." : "PayPal is not configured yet.", !paypalReady);
+        return;
+      }
       e.preventDefault(); e.stopPropagation();
-      var data = Object.fromEntries(new FormData(form).entries());
-      var cart = [];
-      try { cart = JSON.parse(localStorage.getItem("electrohub-cart") || "[]"); } catch (_) {}
-      var items = cart.map(function (c) { return { id: c.id, quantity: c.quantity }; });
-      var order = { customerName: data.customerName, email: data.email, phone: data.phone, address: data.address, city: data.city, state: data.state, pincode: data.pincode, items: items };
+      var order = getCheckoutOrder();
       var endpoint = payVal === "stripe" ? "/api/payment/stripe/create-session"
                    : payVal === "paypal" ? "/api/payment/paypal/create-order"
                    : "/api/payment/wise/confirm";
