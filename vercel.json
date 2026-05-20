@@ -9,7 +9,7 @@
   ],
   "routes": [
     { "src": "/favicon.ico", "status": 302, "headers": { "Location": "/public/favicon.svg" } },
-    { "src": "/public/(.*)", "dest": "/api/index.js" },
+    { "src": "/public/(.*)", "dest": "/api/index.js?__public=$1" },
     { "src": "/(.*)", "dest": "/api/index.js" }
   ]
 }

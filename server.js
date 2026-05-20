@@ -5258,6 +5258,12 @@ async function handleRequest(req, res) {
   const currentUser = await getCurrentUser(req);
   globalThis.__mapleCtx = getRequestContext(req);
 
+  const vercelPublicAsset = url.searchParams.get("__public");
+  if (vercelPublicAsset) {
+    serveStatic(res, path.join(PUBLIC_DIR, vercelPublicAsset));
+    return;
+  }
+
   if (pathname.startsWith("/public/")) {
     serveStatic(res, path.join(PUBLIC_DIR, pathname.replace("/public/", "")));
     return;
