@@ -59,10 +59,28 @@
     }).format(displayValue);
   }
 
+  function getCartItemPrice(item) {
+    const price = Number(item && item.price);
+    if (Number.isFinite(price) && price > 0) return price;
+
+    const amount = Number(item && (item.amount || item.subtotal || item.total));
+    if (Number.isFinite(amount) && amount > 0) {
+      const quantity = Math.max(1, Number(item.quantity) || 1);
+      return amount / quantity;
+    }
+
+    return 0;
+  }
+
+  function getCartItemQuantity(item) {
+    const quantity = Number(item && item.quantity);
+    return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+  }
+
   function getCartSummary(cart) {
     return cart.reduce((summary, item) => {
-      const price = Number(item.price) || 0;
-      const quantity = Number(item.quantity) || 0;
+      const price = getCartItemPrice(item);
+      const quantity = getCartItemQuantity(item);
       summary.count += quantity;
       summary.subtotal += price * quantity;
       return summary;
@@ -90,14 +108,17 @@
         const existing = cart.find((item) => item.id === payload.id);
 
         if (existing) {
-          existing.quantity += 1;
+          existing.quantity = getCartItemQuantity(existing) + 1;
         } else {
-          cart.push({ ...payload, quantity: 1 });
+          cart.push({ ...payload, price: getCartItemPrice(payload), quantity: 1 });
         }
 
         writeCart(cart);
+        const message = `${payload.name || "Item"} successfully added to cart.`;
         if (window.showToast) {
-          window.showToast(`${payload.name || "Product"} successfully added to cart.`);
+          window.showToast(message);
+        } else {
+          window.alert(message);
         }
         button.textContent = "Added";
         setTimeout(() => {
@@ -116,17 +137,20 @@
     const subtotal = summary.subtotal;
     const count = summary.count;
     const tax = 0;
-    const total = count > 0 ? subtotal : 0;
+    const total = subtotal + tax;
     const subtotalText = formatCurrency(subtotal);
+    const taxText = tax > 0 ? formatCurrency(tax) : "Calculated at checkout";
     const totalText = formatCurrency(total);
 
     setText("[data-cart-items-count]", count);
     setText("[data-cart-subtotal]", subtotalText);
     const cartTaxNode = document.querySelector("[data-cart-tax]");
     if (cartTaxNode) {
-      cartTaxNode.textContent = formatCurrency(tax);
+      cartTaxNode.textContent = taxText;
     }
-    setText("[data-cart-total], [data-cart-total-amount], .cr-cart-total strong", totalText);
+    setText("[data-cart-total]", totalText);
+    setText("[data-cart-total-amount]", totalText);
+    setText(".cr-cart-total strong", totalText);
 
     if (!cart.length) {
       container.innerHTML = `<div class="empty-panel">Your cart is empty. Add products from the catalog to continue.</div>`;
@@ -138,7 +162,7 @@
         <img src="${item.image}" alt="${item.name}">
         <div>
           <strong>${item.name}</strong>
-          <p>${formatCurrency(item.price)} x ${item.quantity}</p>
+          <p>${formatCurrency(getCartItemPrice(item))} x ${getCartItemQuantity(item)}</p>
         </div>
         <button class="ghost-button" data-remove-id="${item.id}">Remove</button>
       </article>
@@ -161,7 +185,7 @@
     if (!itemsNode || !totalNode || !form) return;
 
     const cart = readCart();
-    const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const total = getCartSummary(cart).subtotal;
     totalNode.textContent = formatCurrency(total);
 
     if (!cart.length) {
@@ -172,8 +196,8 @@
 
     itemsNode.innerHTML = cart.map((item) => `
       <div class="summary-line border-row">
-        <span>${item.name} x ${item.quantity}</span>
-        <strong>${formatCurrency(item.price * item.quantity)}</strong>
+        <span>${item.name} x ${getCartItemQuantity(item)}</span>
+        <strong>${formatCurrency(getCartItemPrice(item) * getCartItemQuantity(item))}</strong>
       </div>
     `).join("");
 
