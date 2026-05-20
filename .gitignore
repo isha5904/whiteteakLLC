@@ -5,3 +5,5 @@ server.err
 server.log
 drive-download-*/
 firebase-key.json
+
+.vercel

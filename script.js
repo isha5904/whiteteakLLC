@@ -372,6 +372,7 @@ const elements = {
   checkoutButton: document.getElementById("checkoutButton"),
   checkoutModal: document.getElementById("checkoutModal"),
   closeCheckoutButton: document.getElementById("closeCheckoutButton"),
+  checkoutTotal: document.getElementById("checkoutTotal"),
   loginForm: document.getElementById("loginForm"),
   registerForm: document.getElementById("registerForm"),
   checkoutForm: document.getElementById("checkoutForm"),
@@ -853,6 +854,11 @@ function bindEvents() {
       showToast("Your cart is empty.");
       return;
     }
+    const total = state.cart.reduce((sum, item) => {
+      const product = state.products.find((p) => p.id === item.productId);
+      return sum + (product?.price || 0) * item.quantity;
+    }, 0);
+    elements.checkoutTotal.textContent = formatCurrency(total);
     elements.checkoutModal.showModal();
   });
   elements.closeCheckoutButton.addEventListener("click", () => elements.checkoutModal.close());

@@ -3687,9 +3687,77 @@ function orderSuccessPage(code, user = null) {
   });
 }
 
-function authPage({ message = "", email = "", verified = false, error = "", next = "" } = {}, user = null) {
+function authPage({ message = "", email = "", verified = false, error = "", next = "", otpExpires = null, otpMode = "" } = {}, user = null) {
   const nextNotice = next ? `<div class="eo-auth-banner">Please login to access your ${/checkout/i.test(next) ? "checkout" : "cart"}.</div>` : "";
   const loginAction = next ? `/auth/login?next=${encodeURIComponent(next)}` : "/auth/login";
+  const isOtpSent = otpExpires && otpMode;
+  
+  let formHtml = "";
+  let titleHtml = "";
+  let subHtml = "";
+  
+  if (isOtpSent) {
+    titleHtml = "Verify OTP";
+    subHtml = `Enter the 6-digit code we sent to <strong>${escapeHtml(email)}</strong>`;
+    formHtml = `
+      <form class="eo-auth-form" method="POST" action="/auth/verify-otp" style="margin-top:14px">
+        <input type="hidden" name="email" value="${escapeHtml(email)}">
+        <label class="eo-auth-label">6-digit OTP</label>
+        <input class="eo-auth-input" type="text" name="otp" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required autofocus style="letter-spacing:8px;font-size:22px;text-align:center;font-weight:700">
+        <div style="margin-top:12px;font-size:14px;color:#666;text-align:center">
+          <strong>Time remaining:</strong> <span id="otp-timer" style="font-weight:700;color:#d32f2f">10:00</span>
+        </div>
+        <button class="eo-auth-btn" id="otp-submit" type="submit" style="margin-top:12px">Verify & continue</button>
+      </form>
+      <p class="eo-auth-foot" style="margin-top:16px">Didn't get the code? <a href="/auth/resend-otp?email=${encodeURIComponent(email)}">Resend OTP</a></p>
+      <script>
+        (function() {
+          const expiresAt = ${otpExpires};
+          const timerEl = document.getElementById('otp-timer');
+          const submitBtn = document.getElementById('otp-submit');
+          
+          function updateTimer() {
+            const now = Date.now();
+            const remaining = Math.max(0, expiresAt - now);
+            const totalSeconds = Math.floor(remaining / 1000);
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            const timeStr = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+            
+            timerEl.textContent = timeStr;
+            
+            if (remaining <= 0) {
+              timerEl.textContent = '0:00';
+              timerEl.style.color = '#d32f2f';
+              submitBtn.disabled = true;
+              submitBtn.style.opacity = '0.5';
+              submitBtn.style.cursor = 'not-allowed';
+            } else if (remaining <= 60000) {
+              timerEl.style.color = '#f57c00';
+            } else {
+              timerEl.style.color = '#d32f2f';
+            }
+          }
+          
+          updateTimer();
+          setInterval(updateTimer, 1000);
+        })();
+      </script>
+    `;
+  } else {
+    titleHtml = "Login";
+    subHtml = "Enter your email and password to access your account.";
+    formHtml = `
+      <form class="eo-auth-form" method="POST" action="${loginAction}">
+        <label>Email<input type="email" name="email" value="${escapeHtml(email)}" required autocomplete="email"></label>
+        <label>Password<input type="password" name="password" required autocomplete="current-password"></label>
+        <button class="eo-auth-btn" type="submit">Login</button>
+      </form>
+      <p class="eo-auth-foot">New here? <a href="/signup">Create an account</a></p>
+      <p class="eo-auth-foot-sm">Are you an administrator? <a href="/admin/login">Admin login</a></p>
+    `;
+  }
+  
   return layout({
     title: "Login – WHITETEAKLLC",
     description: "Sign in to your WHITETEAKLLC account to access your cart, orders, and saved items.",
@@ -3711,19 +3779,13 @@ function authPage({ message = "", email = "", verified = false, error = "", next
           </aside>
           <div class="eo-auth-right">
             <div class="eo-auth-card">
-              <h1 class="eo-auth-title">Login</h1>
-              <p class="eo-auth-sub">Enter your email and password to access your account.</p>
+              <h1 class="eo-auth-title">${titleHtml}</h1>
+              <p class="eo-auth-sub">${subHtml}</p>
               ${nextNotice}
               ${verified ? `<div class="eo-auth-banner eo-auth-success">Signup successful — you can login now.</div>` : ""}
               ${message ? `<div class="eo-auth-banner">${escapeHtml(message)}</div>` : ""}
               ${error ? `<div class="eo-auth-banner eo-auth-error">${error}</div>` : ""}
-              <form class="eo-auth-form" method="POST" action="${loginAction}">
-                <label>Email<input type="email" name="email" value="${escapeHtml(email)}" required autocomplete="email"></label>
-                <label>Password<input type="password" name="password" required autocomplete="current-password"></label>
-                <button class="eo-auth-btn" type="submit">Login</button>
-              </form>
-              <p class="eo-auth-foot">New here? <a href="/signup">Create an account</a></p>
-              <p class="eo-auth-foot-sm">Are you an administrator? <a href="/admin/login">Admin login</a></p>
+              ${formHtml}
             </div>
           </div>
         </section>
@@ -3774,6 +3836,7 @@ function signupPage({ message = "", error = "", name = "", email = "" } = {}, us
 function signupSuccessPage(email, user = null, devInfo = null, opts = {}) {
   const isDev = devInfo && devInfo.mailResult && devInfo.mailResult.mode === "dev";
   const error = opts.error || "";
+  const expiresAt = opts.expiresAt || null;
   const devHint = isDev ? `
     <div style="margin-top:14px;padding:12px 14px;background:#fff8e1;border:1px solid #f7d774;border-radius:8px;color:#5b4500;font-size:13px">
       <strong>Dev mode:</strong> SMTP not configured, so the OTP wasn't emailed. Your code is
@@ -3781,6 +3844,48 @@ function signupSuccessPage(email, user = null, devInfo = null, opts = {}) {
     </div>
   ` : "";
   const errorBanner = error ? `<div class="eo-auth-banner eo-auth-error" style="margin-bottom:12px">${escapeHtml(error)}</div>` : "";
+  const timerHtml = expiresAt ? `
+    <div style="margin-top:12px;font-size:14px;color:#666;text-align:center">
+      <strong>Time remaining:</strong> <span id="otp-timer" style="font-weight:700;color:#d32f2f">10:00</span>
+    </div>
+  ` : "";
+  const timerScript = expiresAt ? `
+    <script>
+      (function() {
+        const expiresAt = ${expiresAt};
+        const timerEl = document.getElementById('otp-timer');
+        const submitBtn = document.querySelector('.eo-auth-form button[type="submit"]');
+        
+        function updateTimer() {
+          const now = Date.now();
+          const remaining = Math.max(0, expiresAt - now);
+          const totalSeconds = Math.floor(remaining / 1000);
+          const minutes = Math.floor(totalSeconds / 60);
+          const seconds = totalSeconds % 60;
+          const timeStr = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+          
+          timerEl.textContent = timeStr;
+          
+          if (remaining <= 0) {
+            timerEl.textContent = '0:00';
+            timerEl.style.color = '#d32f2f';
+            if (submitBtn) {
+              submitBtn.disabled = true;
+              submitBtn.style.opacity = '0.5';
+              submitBtn.style.cursor = 'not-allowed';
+            }
+          } else if (remaining <= 60000) {
+            timerEl.style.color = '#f57c00';
+          } else {
+            timerEl.style.color = '#d32f2f';
+          }
+        }
+        
+        updateTimer();
+        setInterval(updateTimer, 1000);
+      })();
+    </script>
+  ` : "";
   return layout({
     title: "Verify your email | WHITETEAKLLC",
     currentPath: "/signup",
@@ -3798,10 +3903,12 @@ function signupSuccessPage(email, user = null, devInfo = null, opts = {}) {
                 <input type="hidden" name="email" value="${escapeHtml(email)}">
                 <label class="eo-auth-label">6-digit OTP</label>
                 <input class="eo-auth-input" type="text" name="otp" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required autofocus style="letter-spacing:8px;font-size:22px;text-align:center;font-weight:700">
+                ${timerHtml}
                 <button class="eo-auth-btn" type="submit" style="margin-top:12px">Verify & continue</button>
               </form>
               ${devHint}
               <p class="eo-auth-foot" style="margin-top:16px">Didn't get the code? <a href="/auth/resend-otp?email=${encodeURIComponent(email)}">Resend OTP</a></p>
+              ${timerScript}
             </div>
           </div>
         </section>
@@ -5315,12 +5422,16 @@ async function handleRequest(req, res) {
   }
 
   if (req.method === "GET" && (pathname === "/login" || pathname === "/auth")) {
+    const otpExpires = url.searchParams.get("otp_expires");
+    const otpMode = url.searchParams.get("otp_mode");
     html(res, 200, authPage({
       message: url.searchParams.get("message") || "",
       email: url.searchParams.get("email") || "",
       verified: url.searchParams.get("verified") === "1",
       error: url.searchParams.get("error") || "",
-      next: url.searchParams.get("next") || ""
+      next: url.searchParams.get("next") || "",
+      otpExpires: otpExpires ? parseInt(otpExpires) : null,
+      otpMode: otpMode || ""
     }, currentUser));
     return;
   }
@@ -5353,7 +5464,7 @@ async function handleRequest(req, res) {
     }
     await dataLayer.createUser({ name, email, password });
     const otp = String(Math.floor(100000 + Math.random() * 900000));
-    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString();
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 10).toISOString();
     await dataLayer.saveOtp({ email, code: otp, purpose: "register", expiresAt });
     const host = req.headers.host || "localhost:3000";
     const proto = req.headers["x-forwarded-proto"] || "http";
@@ -5361,7 +5472,8 @@ async function handleRequest(req, res) {
     let mailResult = { sent: false, mode: "dev" };
     try { mailResult = await sendOtpEmail(email, otp, verifyLink); } catch (e) { console.warn("[signup] mailer error:", e.message); }
     console.log(`[signup] OTP for ${email}: ${otp} — verify link: ${verifyLink}`);
-    html(res, 200, signupSuccessPage(email, currentUser, { mailResult, otp, verifyLink }));
+    const expiresTimestamp = new Date(expiresAt).getTime();
+    html(res, 200, signupSuccessPage(email, currentUser, { mailResult, otp, verifyLink }, { expiresAt: expiresTimestamp }));
     return;
   }
 
@@ -5687,7 +5799,8 @@ async function handleRequest(req, res) {
     const message = emailResult.sent
       ? `OTP sent to ${email}. Please check your inbox.`
       : `OTP sent for ${mode}. Demo code: ${otp}`;
-    res.writeHead(302, { Location: `/auth?message=${encodeURIComponent(message)}&email=${encodeURIComponent(email)}` });
+    const expiresTimestamp = new Date(expiresAt).getTime();
+    res.writeHead(302, { Location: `/auth?message=${encodeURIComponent(message)}&email=${encodeURIComponent(email)}&otp_expires=${expiresTimestamp}&otp_mode=${mode}` });
     res.end();
     return;
   }
@@ -5706,7 +5819,7 @@ async function handleRequest(req, res) {
       return;
     }
     const otp = String(Math.floor(100000 + Math.random() * 900000));
-    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString();
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 10).toISOString();
     await dataLayer.saveOtp({ email, code: otp, purpose: "register", expiresAt });
     const host = req.headers.host || "localhost:3000";
     const proto = req.headers["x-forwarded-proto"] || "http";
@@ -5714,7 +5827,8 @@ async function handleRequest(req, res) {
     let mailResult = { sent: false, mode: "dev" };
     try { mailResult = await sendOtpEmail(email, otp, verifyLink); } catch (e) { console.warn("[resend] mailer error:", e.message); }
     console.log(`[resend] OTP for ${email}: ${otp}`);
-    html(res, 200, signupSuccessPage(email, currentUser, { mailResult, otp, verifyLink }, { error: "" }));
+    const expiresTimestamp = new Date(expiresAt).getTime();
+    html(res, 200, signupSuccessPage(email, currentUser, { mailResult, otp, verifyLink }, { expiresAt: expiresTimestamp }));
     return;
   }
 
