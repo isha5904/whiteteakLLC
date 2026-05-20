@@ -1301,7 +1301,7 @@ function layout({ title, description = "", currentPath = "/", content, user = nu
       ${renderCromaFooter()}
     </div>
     <script>window.__MAPLE_THEME__=${JSON.stringify(theme || "snow")};</script>
-    <script src="/public/app.js"></script>
+    <script src="/public/app.js?v=cart-total-20260520"></script>
   </body>
   </html>`;
 }
