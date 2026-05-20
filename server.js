@@ -3576,17 +3576,6 @@ function checkoutPage(user = null) {
           </section>
 
           <section class="cr-co-step" data-step-body="2">
-            <h2>Verify Email</h2>
-            <div class="mp-verify-card" data-mp-verify>
-              <label>Email <input type="email" name="verifyEmail" data-mp-verify-email value="${escapeHtml(user?.email || "")}"></label>
-              <div class="mp-verify-row">
-                <button type="button" class="mp-ghost" data-mp-send-otp>Send OTP</button>
-                <input type="text" placeholder="Enter 6-digit OTP" maxlength="6" data-mp-verify-code hidden>
-                <button type="button" class="mp-primary" data-mp-verify-submit hidden>Verify</button>
-                <a href="#" class="mp-link" data-mp-change-email hidden>Change email</a>
-              </div>
-              <p class="mp-verify-status" data-mp-verify-status></p>
-            </div>
             <h2>Payment Method</h2>
             <label class="cr-co-pay-option"><input type="radio" name="pay" value="cod" checked><span>Cash on Delivery</span></label>
             <label class="cr-co-pay-option"><input type="radio" name="pay" value="stripe"><span>Stripe (Card)</span></label>
@@ -3603,7 +3592,7 @@ function checkoutPage(user = null) {
             </div>
             <div class="cr-co-actions">
               <button type="button" class="cr-co-back" data-cr-back>Back</button>
-              <button type="button" class="cr-co-next" data-cr-next data-mp-require-verified>Continue to Review</button>
+              <button type="button" class="cr-co-next" data-cr-next>Continue to Review</button>
             </div>
           </section>
 
@@ -5575,12 +5564,6 @@ async function handleRequest(req, res) {
           return;
         }
       }
-      // Email verification gate
-      const cookies = parseCookies(req);
-      const sessTok = cookies.session_token || "guest-" + (req.headers["x-forwarded-for"] || "anon");
-      const verified = db.prepare("SELECT * FROM checkout_email_otps WHERE session_token = ? AND email = ? AND verified = 1 ORDER BY id DESC LIMIT 1").get(sessTok, String(payload.email).toLowerCase());
-      if (!verified) { json(res, 400, { error: "Email not verified. Please verify your email before placing the order." }); return; }
-
       const items = payload.items.map((item) => {
         const product = db.prepare("SELECT id, name, price, stock FROM products WHERE id = ?").get(item.id);
         if (!product) {
@@ -6098,40 +6081,6 @@ async function handleRequest(req, res) {
     } catch (e) { json(res, 400, { error: e.message }); return; }
   }
 
-  // Checkout email OTP
-  if (req.method === "POST" && pathname === "/api/checkout/email-otp") {
-    try {
-      const payload = JSON.parse(await readBody(req) || "{}");
-      const email = String(payload.email || "").trim().toLowerCase();
-      if (!email.includes("@")) { json(res, 400, { error: "Invalid email" }); return; }
-      const cookies = parseCookies(req);
-      const sessTok = cookies.session_token || "guest-" + (req.headers["x-forwarded-for"] || "anon");
-      const code = String(Math.floor(100000 + Math.random() * 900000));
-      db.prepare("DELETE FROM checkout_email_otps WHERE session_token = ?").run(sessTok);
-      db.prepare("INSERT INTO checkout_email_otps (session_token, email, code, verified, created_at) VALUES (?, ?, ?, 0, ?)")
-        .run(sessTok, email, code, new Date().toISOString());
-      try { await sendOtpEmail(email, code); } catch { /* dev */ }
-      console.log(`[checkout-otp] ${email}: ${code}`);
-      json(res, 200, { ok: true });
-      return;
-    } catch (e) { json(res, 400, { error: e.message }); return; }
-  }
-
-  if (req.method === "POST" && pathname === "/api/checkout/verify-email") {
-    try {
-      const payload = JSON.parse(await readBody(req) || "{}");
-      const email = String(payload.email || "").trim().toLowerCase();
-      const code = String(payload.code || "").trim();
-      const cookies = parseCookies(req);
-      const sessTok = cookies.session_token || "guest-" + (req.headers["x-forwarded-for"] || "anon");
-      const row = db.prepare("SELECT * FROM checkout_email_otps WHERE session_token = ? AND email = ? ORDER BY id DESC LIMIT 1").get(sessTok, email);
-      if (!row || row.code !== code) { json(res, 400, { error: "Invalid code" }); return; }
-      db.prepare("UPDATE checkout_email_otps SET verified = 1 WHERE id = ?").run(row.id);
-      json(res, 200, { ok: true });
-      return;
-    } catch (e) { json(res, 400, { error: e.message }); return; }
-  }
-
   if (req.method === "POST" && pathname === "/api/payment/paypal/create-order") {
     try {
       if (!paypalConfigured()) {
@@ -6140,10 +6089,6 @@ async function handleRequest(req, res) {
       }
       const payload = JSON.parse(await readBody(req) || "{}");
       const o = payload.order || payload;
-      const cookies = parseCookies(req);
-      const sessTok = cookies.session_token || "guest-" + (req.headers["x-forwarded-for"] || "anon");
-      const verified = db.prepare("SELECT * FROM checkout_email_otps WHERE session_token = ? AND email = ? AND verified = 1 ORDER BY id DESC LIMIT 1").get(sessTok, String(o.email || "").toLowerCase());
-      if (!verified) { json(res, 400, { error: "Email not verified. Please verify your email before paying." }); return; }
       const { total } = validateCheckoutOrderPayload(o);
       const paypalOrder = await createPayPalOrder(total);
       json(res, 200, { ok: true, paypalOrderId: paypalOrder.id });
@@ -6164,11 +6109,6 @@ async function handleRequest(req, res) {
       const paypalOrderId = String(payload.paypalOrderId || "");
       const o = payload.order || {};
       if (!paypalOrderId) { json(res, 400, { error: "Missing PayPal order id" }); return; }
-
-      const cookies = parseCookies(req);
-      const sessTok = cookies.session_token || "guest-" + (req.headers["x-forwarded-for"] || "anon");
-      const verified = db.prepare("SELECT * FROM checkout_email_otps WHERE session_token = ? AND email = ? AND verified = 1 ORDER BY id DESC LIMIT 1").get(sessTok, String(o.email || "").toLowerCase());
-      if (!verified) { json(res, 400, { error: "Email not verified. Please verify your email before paying." }); return; }
 
       const { items, total } = validateCheckoutOrderPayload(o);
       const capture = await capturePayPalOrder(paypalOrderId);
@@ -6222,11 +6162,6 @@ async function handleRequest(req, res) {
       for (const k of required) {
         if (!o[k] || (Array.isArray(o[k]) && o[k].length === 0)) { json(res, 400, { error: `Missing ${k}` }); return; }
       }
-      // Email verification enforcement
-      const cookies = parseCookies(req);
-      const sessTok = cookies.session_token || "guest-" + (req.headers["x-forwarded-for"] || "anon");
-      const verified = db.prepare("SELECT * FROM checkout_email_otps WHERE session_token = ? AND email = ? AND verified = 1 ORDER BY id DESC LIMIT 1").get(sessTok, String(o.email).toLowerCase());
-      if (!verified) { json(res, 400, { error: "Email not verified. Please verify your email before paying." }); return; }
 
       const items = o.items.map((item) => {
         const product = db.prepare("SELECT id, name, price, stock FROM products WHERE id = ?").get(item.id);

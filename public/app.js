@@ -1130,16 +1130,11 @@
     });
   })();
 
-  /* ==== MAPLE: checkout email verification + payment ==== */
+  /* ==== MAPLE: checkout payment ==== */
   (function () {
     var shell = document.querySelector(".cr-co-shell");
     if (!shell) return;
-    var emailEl = shell.querySelector("[data-mp-verify-email]");
-    var sendBtn = shell.querySelector("[data-mp-send-otp]");
-    var codeEl = shell.querySelector("[data-mp-verify-code]");
-    var verifyBtn = shell.querySelector("[data-mp-verify-submit]");
-    var statusEl = shell.querySelector("[data-mp-verify-status]");
-    var changeLink = shell.querySelector("[data-mp-change-email]");
+    var statusEl = shell.querySelector("#eh-pay-error") || shell.querySelector("[data-checkout-message]");
     var wise = shell.querySelector("[data-mp-wise]");
     var paypalPanel = shell.querySelector("[data-paypal-panel]");
     var paypalButtons = shell.querySelector("[data-paypal-buttons]");
@@ -1147,42 +1142,12 @@
     var paypalClientId = shell.getAttribute("data-paypal-client-id") || "";
     var paypalCurrency = shell.getAttribute("data-paypal-currency") || "USD";
     var paypalRendered = false;
-    var verified = false;
-    function setStatus(t, err) { if (!statusEl) return; statusEl.textContent = t || ""; statusEl.classList.toggle("is-error", !!err); }
-    function lock(e) {
-      emailEl.readOnly = true;
-      emailEl.style.background = "#f7f8fb";
-      sendBtn.hidden = true; codeEl.hidden = true; verifyBtn.hidden = true;
-      changeLink.hidden = false;
-      verified = true;
-      setStatus("🔒 Email verified: " + e, false);
+    function setStatus(t, err) {
+      if (!statusEl) return;
+      statusEl.textContent = t || "";
+      statusEl.hidden = !t;
+      statusEl.classList.toggle("is-error", !!err);
     }
-    if (sendBtn) sendBtn.addEventListener("click", function () {
-      var email = emailEl.value.trim();
-      if (!email) { setStatus("Enter an email", true); return; }
-      fetch("/api/checkout/email-otp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email }) })
-        .then(function (r) { return r.json(); })
-        .then(function (j) {
-          if (j.ok) { codeEl.hidden = false; verifyBtn.hidden = false; setStatus("OTP sent. Check your inbox.", false); }
-          else setStatus(j.error || "Failed", true);
-        });
-    });
-    if (verifyBtn) verifyBtn.addEventListener("click", function () {
-      var email = emailEl.value.trim();
-      var code = (codeEl.value || "").trim();
-      fetch("/api/checkout/verify-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email, code: code }) })
-        .then(function (r) { return r.json(); })
-        .then(function (j) {
-          if (j.ok) lock(email);
-          else setStatus(j.error || "Invalid code", true);
-        });
-    });
-    if (changeLink) changeLink.addEventListener("click", function (e) {
-      e.preventDefault();
-      emailEl.readOnly = false; emailEl.style.background = "";
-      sendBtn.hidden = false; codeEl.hidden = true; codeEl.value = ""; verifyBtn.hidden = true;
-      changeLink.hidden = true; verified = false; setStatus("", false);
-    });
     function getCheckoutOrder() {
       var data = Object.fromEntries(new FormData(form).entries());
       var cart = [];
@@ -1220,10 +1185,6 @@
           style: { layout: "vertical", shape: "rect", label: "paypal" },
           onClick: function () {
             if (!form.reportValidity()) return false;
-            if (!verified) {
-              setStatus("Please verify your email before paying with PayPal.", true);
-              return false;
-            }
             var cart = [];
             try { cart = JSON.parse(localStorage.getItem("electrohub-cart") || "[]"); } catch (_) {}
             if (!cart.length) {
@@ -1286,7 +1247,6 @@
     form.addEventListener("submit", function (e) {
       var payVal = (form.querySelector('input[name=pay]:checked') || {}).value || "cod";
       if (payVal === "cod") return; // fall through to existing flow
-      if (!verified) { e.preventDefault(); e.stopPropagation(); setStatus("Please verify your email before paying.", true); return; }
       if (payVal === "paypal") {
         e.preventDefault();
         e.stopPropagation();
