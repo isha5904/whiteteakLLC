@@ -113,7 +113,7 @@
     const subtotal = summary.subtotal;
     const count = summary.count;
     const tax = 0;
-    const total = subtotal + tax;
+    const total = subtotal;
 
     setText("[data-cart-items-count]", count);
     setText("[data-cart-total]", formatCurrency(subtotal));

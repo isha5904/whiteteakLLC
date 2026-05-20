@@ -3518,7 +3518,7 @@ function cartPage(user = null) {
               <input type="text" placeholder="Enter promo code">
               <button type="button">Apply</button>
             </div>
-            <div class="cr-cart-row cr-cart-total"><span>Total</span><strong data-cart-total-amount>${currency(0)}</strong></div>
+            <div class="cr-cart-row cr-cart-total"><span>Total</span><strong data-cart-total data-cart-total-amount>${currency(0)}</strong></div>
             <a class="cr-cart-checkout" href="/checkout">Proceed to Checkout</a>
             <p class="cr-cart-secure">Secure checkout · 7-day returns</p>
           </aside>
