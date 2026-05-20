@@ -93,10 +93,18 @@
     });
   }
 
+  function setCartTotalText(text) {
+    document.querySelectorAll("[data-cart-total], [data-cart-total-amount], .cr-cart-total strong").forEach((node) => {
+      node.textContent = text;
+    });
+  }
+
   function updateCartCount() {
-    const count = readCart().reduce((sum, item) => sum + item.quantity, 0);
+    const count = readCart().reduce((sum, item) => sum + getCartItemQuantity(item), 0);
     document.querySelectorAll("[data-cart-count]").forEach((node) => {
       node.textContent = count;
+      node.hidden = false;
+      node.classList.toggle("is-empty", count <= 0);
     });
   }
 
@@ -148,9 +156,8 @@
     if (cartTaxNode) {
       cartTaxNode.textContent = taxText;
     }
-    setText("[data-cart-total]", totalText);
-    setText("[data-cart-total-amount]", totalText);
-    setText(".cr-cart-total strong", totalText);
+    setCartTotalText(totalText);
+    requestAnimationFrame(() => setCartTotalText(totalText));
 
     if (!cart.length) {
       container.innerHTML = `<div class="empty-panel">Your cart is empty. Add products from the catalog to continue.</div>`;

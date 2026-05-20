@@ -223,8 +223,10 @@ h1, h2, h3, h4, h5, h6 { font-family: "Space Grotesk", sans-serif; }
   font-weight: 800;
   font-size: 0.9rem;
   white-space: nowrap;
+  position: relative;
 }
-.cart-pill span {
+.cart-pill span,
+.mp-cart-count {
   display: inline-grid;
   place-items: center;
   min-width: 24px;
@@ -234,6 +236,32 @@ h1, h2, h3, h4, h5, h6 { font-family: "Space Grotesk", sans-serif; }
   background: rgba(18, 214, 197, 0.2);
   color: #baf7f1;
   font-size: 0.82rem;
+}
+.mp-cart-pill {
+  min-width: 56px;
+  justify-content: center;
+  padding-right: 18px;
+}
+.mp-cart-pill .mp-cart-count {
+  position: absolute;
+  top: -8px;
+  right: -7px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border: 2px solid var(--surface, #fff);
+  background: #99f6e4;
+  color: #0f766e;
+  font-size: 0.76rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.mp-cart-pill .mp-cart-count.is-empty {
+  background: #e5e7eb;
+  color: #64748b;
+}
+.mp-admin-cart-pill {
+  margin-right: 8px;
 }
 .account-link {
   display: inline-flex;

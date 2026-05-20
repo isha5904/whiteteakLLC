@@ -7,7 +7,7 @@ try {
 }
 
 function getMailerConfig() {
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, SMTP_REPLY_TO } = process.env;
   if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS || !SMTP_FROM || !nodemailer) {
     return null;
   }
@@ -16,7 +16,8 @@ function getMailerConfig() {
     port: Number(SMTP_PORT),
     secure: Number(SMTP_PORT) === 465,
     auth: { user: SMTP_USER, pass: SMTP_PASS },
-    from: SMTP_FROM
+    from: SMTP_FROM,
+    replyTo: SMTP_REPLY_TO || SMTP_FROM
   };
 }
 
@@ -44,6 +45,7 @@ async function sendOtpEmail(email, otp, verifyLink = "") {
 
   await transporter.sendMail({
     from: config.from,
+    replyTo: config.replyTo,
     to: email,
     subject: "Your WHITETEAKLLC verification code",
     text: `Your WHITETEAKLLC OTP is ${otp}. It is valid for 10 minutes.${linkBlockText}`,

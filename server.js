@@ -1225,7 +1225,7 @@ function layout({ title, description = "", currentPath = "/", content, user = nu
                  <form action="/auth/logout" method="POST" class="mp-logout-form" onsubmit="return confirm('Are you sure you want to log out?')"><button class="mp-logout-btn" type="submit">Logout</button></form>`
               : `<a class="account-link" href="/login">👤 Sign in</a>`}
             ${user ? `<a class="mp-wish-link" href="/wishlist" aria-label="Wishlist">♥ <span data-wish-count>${(() => { try { return db.prepare("SELECT COUNT(*) AS c FROM wishlists WHERE user_email=?").get(user.email).c; } catch { return 0; } })()}</span></a>` : ""}
-            <a class="cart-pill" href="/cart">🛒 <span data-cart-count>0</span></a>
+            <a class="cart-pill mp-cart-pill" href="/cart" aria-label="Cart">🛒 <span class="mp-cart-count" data-cart-count>0</span></a>
           </div>
         </div>
       </header>
@@ -1301,7 +1301,7 @@ function layout({ title, description = "", currentPath = "/", content, user = nu
       ${renderCromaFooter()}
     </div>
     <script>window.__MAPLE_THEME__=${JSON.stringify(theme || "snow")};</script>
-    <script src="/public/app.js?v=cart-total-toast-20260520b"></script>
+    <script src="/public/app.js?v=cart-badge-total-sync-20260520d"></script>
   </body>
   </html>`;
 }
@@ -1404,7 +1404,7 @@ function clearSessionCookie(res) {
 }
 
 function isAdmin(user) {
-  return Boolean(user && (user.email === "admin@electrohub.local" || user.name === "Admin123"));
+  return Boolean(user && (user.email === ADMIN_LOGIN_EMAIL || user.email === ADMIN_SYNTHETIC_EMAIL || user.name === "Admin123"));
 }
 
 if (!process.env.ADMIN_USERNAME || !process.env.ADMIN_PASSWORD) {
@@ -1412,7 +1412,8 @@ if (!process.env.ADMIN_USERNAME || !process.env.ADMIN_PASSWORD) {
 }
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-const ADMIN_SYNTHETIC_EMAIL = process.env.ADMIN_SYNTHETIC_EMAIL || "admin@electrohub.local";
+const ADMIN_LOGIN_EMAIL = "admin@whiteteakllc.com";
+const ADMIN_SYNTHETIC_EMAIL = process.env.ADMIN_SYNTHETIC_EMAIL || ADMIN_LOGIN_EMAIL;
 if (!ADMIN_USERNAME || !ADMIN_PASSWORD) {
   console.warn("[warn] ADMIN_USERNAME / ADMIN_PASSWORD not set. Admin login disabled. Copy .env.example to .env.");
 }
@@ -3931,7 +3932,7 @@ function adminLoginPage({ error = "" } = {}) {
           <p class="eo-admin-auth-sub">Restricted access. Authorised personnel only.</p>
           ${error ? `<div class="eo-auth-banner eo-auth-error">${escapeHtml(error)}</div>` : ""}
           <form class="eo-auth-form eo-admin-auth-form" method="POST" action="/admin/login">
-            <label>Username<input name="username" required autocomplete="username"></label>
+            <label>Email<input name="username" type="email" required autocomplete="username" value="${ADMIN_LOGIN_EMAIL}"></label>
             <label>Password<input type="password" name="password" required autocomplete="current-password"></label>
             <button class="eo-auth-btn eo-admin-auth-btn" type="submit">Sign in</button>
           </form>
@@ -4432,6 +4433,7 @@ function adminPage(user = null, opts = {}) {
               <input class="cr-admin-search" type="search" name="q" value="${escapeHtml(q)}" placeholder="Search by order ref, customer, product, amount...">
             </form>
             <div class="cr-admin-profile">
+              <a class="cart-pill mp-cart-pill mp-admin-cart-pill" href="/cart" aria-label="Cart">🛒 <span class="mp-cart-count" data-cart-count>0</span></a>
               <span class="cr-admin-avatar">${escapeHtml((user?.name || "A").charAt(0).toUpperCase())}</span>
               <span class="cr-admin-name">${escapeHtml(user?.name || "Admin")}</span>
             </div>
@@ -5358,16 +5360,17 @@ async function handleRequest(req, res) {
     const body = parseFormEncoded(await readBody(req));
     const username = String(body.username || "").trim();
     const password = String(body.password || "");
-    if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+    const isAdminIdentifier = username.toLowerCase() === ADMIN_LOGIN_EMAIL.toLowerCase() || username === ADMIN_USERNAME;
+    if (isAdminIdentifier && password === ADMIN_PASSWORD) {
       // Stateless signed cookie — works on serverless without DB persistence
-      setAuthCookie(res, { email: ADMIN_SYNTHETIC_EMAIL, name: ADMIN_USERNAME, role: "admin" });
+      setAuthCookie(res, { email: ADMIN_LOGIN_EMAIL, name: ADMIN_LOGIN_EMAIL, role: "admin" });
       try {
-        let adminUser = await dataLayer.getUserByEmail(ADMIN_SYNTHETIC_EMAIL);
+        let adminUser = await dataLayer.getUserByEmail(ADMIN_LOGIN_EMAIL);
         if (!adminUser) {
-          adminUser = await dataLayer.createUser({ name: ADMIN_USERNAME, email: ADMIN_SYNTHETIC_EMAIL, password: ADMIN_PASSWORD });
+          adminUser = await dataLayer.createUser({ name: ADMIN_LOGIN_EMAIL, email: ADMIN_LOGIN_EMAIL, password: ADMIN_PASSWORD });
         }
-        await dataLayer.markUserVerified(ADMIN_SYNTHETIC_EMAIL);
-        const session = await dataLayer.createSession(ADMIN_SYNTHETIC_EMAIL);
+        await dataLayer.markUserVerified(ADMIN_LOGIN_EMAIL);
+        const session = await dataLayer.createSession(ADMIN_LOGIN_EMAIL);
         if (session) setSessionCookie(res, session.token, session.expiresAt);
       } catch (_err) { /* ignore — signed cookie is sufficient */ }
       res.writeHead(302, { Location: "/admin" });
@@ -5751,16 +5754,17 @@ async function handleRequest(req, res) {
     const password = String(body.password || "");
     const name = String(body.name || "").trim();
 
-    // Hardcoded admin login (username-based)
-    if (mode === "login" && identifier === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-      setAuthCookie(res, { email: ADMIN_SYNTHETIC_EMAIL, name: ADMIN_USERNAME, role: "admin" });
+    // Hardcoded admin login (username/email-based)
+    const isAdminIdentifier = identifier.toLowerCase() === ADMIN_LOGIN_EMAIL.toLowerCase() || identifier === ADMIN_USERNAME;
+    if (mode === "login" && isAdminIdentifier && password === ADMIN_PASSWORD) {
+      setAuthCookie(res, { email: ADMIN_LOGIN_EMAIL, name: ADMIN_LOGIN_EMAIL, role: "admin" });
       try {
-        let adminUser = await dataLayer.getUserByEmail(ADMIN_SYNTHETIC_EMAIL);
+        let adminUser = await dataLayer.getUserByEmail(ADMIN_LOGIN_EMAIL);
         if (!adminUser) {
-          adminUser = await dataLayer.createUser({ name: ADMIN_USERNAME, email: ADMIN_SYNTHETIC_EMAIL, password: ADMIN_PASSWORD });
+          adminUser = await dataLayer.createUser({ name: ADMIN_LOGIN_EMAIL, email: ADMIN_LOGIN_EMAIL, password: ADMIN_PASSWORD });
         }
-        await dataLayer.markUserVerified(ADMIN_SYNTHETIC_EMAIL);
-        const session = await dataLayer.createSession(ADMIN_SYNTHETIC_EMAIL);
+        await dataLayer.markUserVerified(ADMIN_LOGIN_EMAIL);
+        const session = await dataLayer.createSession(ADMIN_LOGIN_EMAIL);
         if (session) setSessionCookie(res, session.token, session.expiresAt);
       } catch (_err) { /* signed cookie is sufficient */ }
       res.writeHead(302, { Location: "/admin" });
