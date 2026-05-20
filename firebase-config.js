@@ -1,7 +1,7 @@
-const admin = require("firebase-admin");
 const path = require("path");
 const fs = require("fs");
 
+let admin = null;
 let firebaseDb = null;
 try {
   let serviceAccount;
@@ -14,6 +14,7 @@ try {
   }
 
   if (serviceAccount) {
+    admin = require("firebase-admin");
     if (!admin.apps.length) {
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount)
