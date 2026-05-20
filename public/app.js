@@ -59,6 +59,22 @@
     }).format(displayValue);
   }
 
+  function getCartSummary(cart) {
+    return cart.reduce((summary, item) => {
+      const price = Number(item.price) || 0;
+      const quantity = Number(item.quantity) || 0;
+      summary.count += quantity;
+      summary.subtotal += price * quantity;
+      return summary;
+    }, { count: 0, subtotal: 0 });
+  }
+
+  function setText(selector, text) {
+    document.querySelectorAll(selector).forEach((node) => {
+      node.textContent = text;
+    });
+  }
+
   function updateCartCount() {
     const count = readCart().reduce((sum, item) => sum + item.quantity, 0);
     document.querySelectorAll("[data-cart-count]").forEach((node) => {
@@ -93,23 +109,19 @@
     if (!container) return;
 
     const cart = readCart();
-    const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const count = cart.reduce((sum, item) => sum + item.quantity, 0);
+    const summary = getCartSummary(cart);
+    const subtotal = summary.subtotal;
+    const count = summary.count;
     const tax = 0;
     const total = subtotal + tax;
 
-    document.querySelector("[data-cart-items-count]").textContent = count;
-    document.querySelectorAll("[data-cart-total]").forEach((node) => {
-      node.textContent = formatCurrency(subtotal);
-    });
+    setText("[data-cart-items-count]", count);
+    setText("[data-cart-total]", formatCurrency(subtotal));
     const cartTaxNode = document.querySelector("[data-cart-tax]");
     if (cartTaxNode) {
       cartTaxNode.textContent = formatCurrency(tax);
     }
-    const cartTotalAmount = document.querySelector("[data-cart-total-amount]");
-    if (cartTotalAmount) {
-      cartTotalAmount.textContent = formatCurrency(total);
-    }
+    setText("[data-cart-total-amount], .cr-cart-total strong", formatCurrency(total));
 
     if (!cart.length) {
       container.innerHTML = `<div class="empty-panel">Your cart is empty. Add products from the catalog to continue.</div>`;
