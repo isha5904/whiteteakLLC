@@ -96,6 +96,9 @@
         }
 
         writeCart(cart);
+        if (window.showToast) {
+          window.showToast(`${payload.name || "Product"} successfully added to cart.`);
+        }
         button.textContent = "Added";
         setTimeout(() => {
           button.textContent = "Add to cart";
