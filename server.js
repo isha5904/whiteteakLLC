@@ -1301,7 +1301,7 @@ function layout({ title, description = "", currentPath = "/", content, user = nu
       ${renderCromaFooter()}
     </div>
     <script>window.__MAPLE_THEME__=${JSON.stringify(theme || "snow")};</script>
-    <script src="/public/app.js?v=cart-badge-total-sync-20260520d"></script>
+    <script src="/public/app.js?v=paypal-card-checkout-20260520a"></script>
   </body>
   </html>`;
 }
@@ -3589,6 +3589,7 @@ function checkoutPage(user = null) {
               <p><strong>PayPal checkout</strong></p>
               <p data-paypal-help>${ppReady ? "Continue to review, then pay securely with PayPal." : "PayPal is unavailable until PAYPAL_CLIENT_ID and PAYPAL_SECRET are added to .env."}</p>
               <div data-paypal-buttons></div>
+              <div data-paypal-card-buttons></div>
             </div>
             <div class="cr-co-actions">
               <button type="button" class="cr-co-back" data-cr-back>Back</button>
