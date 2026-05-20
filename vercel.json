@@ -4,7 +4,7 @@
     {
       "src": "api/index.js",
       "use": "@vercel/node",
-      "config": { "includeFiles": "{public/assets/**,data/**,.env}" }
+      "config": { "includeFiles": "{public/assets/**,data/product-images.csv,data/products-v2.json,data/store.db}" }
     },
     {
       "src": "public/**",
