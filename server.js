@@ -127,6 +127,15 @@ db.exec(`
     verified INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS paypal_pending_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT UNIQUE NOT NULL,
+    paypal_order_id TEXT UNIQUE,
+    order_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL,
+    completed_at TEXT
+  );
 `);
 
 ensureProductColumn("images_json", "TEXT NOT NULL DEFAULT '[]'");
@@ -866,17 +875,26 @@ function getPayPalAccessToken() {
   });
 }
 
-async function createPayPalOrder(totalInr) {
+async function createPayPalOrder(totalInr, returnUrl = "", cancelUrl = "") {
   const accessToken = await getPayPalAccessToken();
-  return paypalRequest("/v2/checkout/orders", "POST", {
+  const payload = {
     intent: "CAPTURE",
+    application_context: {
+      brand_name: "WHITETEAKLLC",
+      landing_page: "LOGIN",
+      user_action: "PAY_NOW",
+      shipping_preference: "NO_SHIPPING"
+    },
     purchase_units: [{
       amount: {
         currency_code: PAYPAL_CURRENCY,
         value: paypalAmountFromInr(totalInr)
       }
     }]
-  }, accessToken);
+  };
+  if (returnUrl) payload.application_context.return_url = returnUrl;
+  if (cancelUrl) payload.application_context.cancel_url = cancelUrl;
+  return paypalRequest("/v2/checkout/orders", "POST", payload, accessToken);
 }
 
 async function capturePayPalOrder(paypalOrderId) {
@@ -900,6 +918,29 @@ function validateCheckoutOrderPayload(o) {
   });
   const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   return { items, total };
+}
+
+function createCheckoutOrderRecord(o, status = "Paid", paymentMethod = "paypal") {
+  const { items, total } = validateCheckoutOrderPayload(o);
+  const orderCode = `ORD-${1000 + Number(db.prepare("SELECT COUNT(*) AS count FROM orders").get().count) + 1}`;
+  db.prepare(`INSERT INTO orders (order_code, customer_name, email, phone, address, city, state, pincode, status, total, items_json, created_at, payment_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    orderCode,
+    o.customerName,
+    String(o.email).toLowerCase(),
+    o.phone,
+    o.address,
+    o.city,
+    o.state,
+    o.pincode,
+    status,
+    total,
+    JSON.stringify(items),
+    new Date().toISOString(),
+    paymentMethod
+  );
+  const reduceStock = db.prepare("UPDATE products SET stock = stock - ? WHERE id = ?");
+  for (const item of items) reduceStock.run(item.quantity, item.id);
+  return { orderCode, items, total };
 }
 
 function currency(value) {
@@ -1301,7 +1342,7 @@ function layout({ title, description = "", currentPath = "/", content, user = nu
       ${renderCromaFooter()}
     </div>
     <script>window.__MAPLE_THEME__=${JSON.stringify(theme || "snow")};</script>
-    <script src="/public/app.js?v=paypal-card-checkout-20260520a"></script>
+    <script src="/public/app.js?v=paypal-redirect-checkout-20260520a"></script>
   </body>
   </html>`;
 }
@@ -3588,6 +3629,7 @@ function checkoutPage(user = null) {
             <div class="mp-wise-box" data-paypal-panel hidden>
               <p><strong>PayPal checkout</strong></p>
               <p data-paypal-help>${ppReady ? "Continue to review, then pay securely with PayPal." : "PayPal is unavailable until PAYPAL_CLIENT_ID and PAYPAL_SECRET are added to .env."}</p>
+              <button type="button" class="mp-primary" data-paypal-redirect ${ppReady ? "" : "disabled"}>Open PayPal checkout</button>
               <div data-paypal-buttons></div>
               <div data-paypal-card-buttons></div>
             </div>
@@ -5307,6 +5349,52 @@ async function handleRequest(req, res) {
     return;
   }
 
+  if (req.method === "GET" && pathname === "/paypal/return") {
+    try {
+      const token = String(url.searchParams.get("pp_token") || "");
+      const paypalOrderId = String(url.searchParams.get("token") || "");
+      if (!token) throw new Error("Missing PayPal return token");
+      const pending = db.prepare("SELECT * FROM paypal_pending_orders WHERE token = ? ORDER BY id DESC LIMIT 1").get(token);
+      if (!pending) throw new Error("PayPal checkout session not found");
+      if (pending.status === "completed") {
+        const existing = JSON.parse(pending.order_json || "{}");
+        res.writeHead(302, { Location: existing.redirect || "/checkout" });
+        res.end();
+        return;
+      }
+      const orderId = pending.paypal_order_id || paypalOrderId;
+      if (!orderId) throw new Error("Missing PayPal order id");
+      const o = JSON.parse(pending.order_json || "{}");
+      const { total } = validateCheckoutOrderPayload(o);
+      const capture = await capturePayPalOrder(orderId);
+      if (capture.status !== "COMPLETED") throw new Error(`PayPal capture not completed (${capture.status || "unknown"})`);
+      const capturedAmount = capture.purchase_units?.[0]?.payments?.captures?.[0]?.amount;
+      if (capturedAmount && capturedAmount.currency_code !== PAYPAL_CURRENCY) throw new Error("PayPal currency mismatch");
+      if (capturedAmount && Math.abs(Number(capturedAmount.value) - Number(paypalAmountFromInr(total))) > 0.01) throw new Error("PayPal amount mismatch");
+      const { orderCode } = createCheckoutOrderRecord(o, "Paid", "paypal");
+      const redirect = `/order-success/${encodeURIComponent(orderCode)}`;
+      db.prepare("UPDATE paypal_pending_orders SET status = 'completed', order_json = ?, completed_at = ? WHERE token = ?")
+        .run(JSON.stringify({ ...o, redirect }), new Date().toISOString(), token);
+      res.writeHead(302, { Location: redirect });
+      res.end();
+      return;
+    } catch (e) {
+      html(res, 400, layout({
+        title: "PayPal payment failed - WHITETEAKLLC",
+        currentPath: "/checkout",
+        user: currentUser,
+        content: `<main class="mp-page"><section class="mp-page-hero"><h1>PayPal payment failed</h1><p>${escapeHtml(e.message || "Unable to complete PayPal payment.")}</p><a class="mp-primary" href="/checkout">Back to checkout</a></section></main>`
+      }));
+      return;
+    }
+  }
+
+  if (req.method === "GET" && pathname === "/paypal/cancel") {
+    res.writeHead(302, { Location: "/checkout?paypal=cancelled" });
+    res.end();
+    return;
+  }
+
   if (req.method === "GET" && pathname === "/track") {
     html(res, 200, trackPage(url.searchParams.get("orderId") || "", currentUser));
     return;
@@ -6091,8 +6179,18 @@ async function handleRequest(req, res) {
       const payload = JSON.parse(await readBody(req) || "{}");
       const o = payload.order || payload;
       const { total } = validateCheckoutOrderPayload(o);
-      const paypalOrder = await createPayPalOrder(total);
-      json(res, 200, { ok: true, paypalOrderId: paypalOrder.id });
+      const redirectToken = crypto.randomBytes(18).toString("hex");
+      const proto = req.headers["x-forwarded-proto"] || (req.socket?.encrypted ? "https" : "http");
+      const origin = `${proto}://${req.headers.host || "localhost:3000"}`;
+      const paypalOrder = await createPayPalOrder(
+        total,
+        `${origin}/paypal/return?pp_token=${encodeURIComponent(redirectToken)}`,
+        `${origin}/paypal/cancel`
+      );
+      const approveUrl = (paypalOrder.links || []).find((link) => link.rel === "approve")?.href || "";
+      db.prepare("INSERT INTO paypal_pending_orders (token, paypal_order_id, order_json, status, created_at) VALUES (?, ?, ?, 'pending', ?)")
+        .run(redirectToken, paypalOrder.id, JSON.stringify(o), new Date().toISOString());
+      json(res, 200, { ok: true, paypalOrderId: paypalOrder.id, approveUrl });
       return;
     } catch (e) {
       json(res, 400, { error: e.message || "Could not create PayPal order" });

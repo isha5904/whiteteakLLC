@@ -1137,6 +1137,7 @@
     var statusEl = shell.querySelector("#eh-pay-error") || shell.querySelector("[data-checkout-message]");
     var wise = shell.querySelector("[data-mp-wise]");
     var paypalPanel = shell.querySelector("[data-paypal-panel]");
+    var paypalRedirectBtn = shell.querySelector("[data-paypal-redirect]");
     var paypalButtons = shell.querySelector("[data-paypal-buttons]");
     var paypalCardButtons = shell.querySelector("[data-paypal-card-buttons]");
     var paypalReady = shell.getAttribute("data-paypal-ready") === "1";
@@ -1177,24 +1178,47 @@
       });
     }
 
+    function canStartPayPal() {
+      if (!form.reportValidity()) {
+        setStatus("Please complete the checkout details first.", true);
+        return false;
+      }
+      var cart = [];
+      try { cart = JSON.parse(localStorage.getItem("electrohub-cart") || "[]"); } catch (_) {}
+      if (!cart.length) {
+        setStatus("Your cart is empty.", true);
+        return false;
+      }
+      setStatus("", false);
+      return true;
+    }
+
+    function openPayPalRedirect() {
+      if (!paypalReady || !canStartPayPal()) return;
+      if (paypalRedirectBtn) paypalRedirectBtn.disabled = true;
+      setStatus("Opening PayPal checkout...", false);
+      fetch("/api/payment/paypal/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order: getCheckoutOrder(), redirect: true })
+      }).then(function (r) {
+        return r.json().then(function (j) { return { ok: r.ok, j: j }; });
+      }).then(function (res) {
+        if (!res.ok || !res.j.ok || !res.j.approveUrl) throw new Error(res.j.error || "Could not open PayPal checkout");
+        window.location.href = res.j.approveUrl;
+      }).catch(function (err) {
+        if (paypalRedirectBtn) paypalRedirectBtn.disabled = false;
+        setStatus("PayPal error: " + err.message, true);
+      });
+    }
+
     function buildPayPalButtonOptions(fundingSource) {
       var style = { layout: "vertical", shape: "rect" };
       if (!fundingSource || fundingSource === window.paypal.FUNDING.PAYPAL) style.label = "paypal";
       var opts = {
         style: style,
         onClick: function () {
-          if (!form.reportValidity()) {
-            setStatus("Please complete the checkout details first.", true);
-            return false;
-          }
-          var cart = [];
-          try { cart = JSON.parse(localStorage.getItem("electrohub-cart") || "[]"); } catch (_) {}
-          if (!cart.length) {
-            setStatus("Your cart is empty.", true);
-            return false;
-          }
-          setStatus("", false);
-          return true;
+          return canStartPayPal();
         },
         createOrder: function () {
           return fetch("/api/payment/paypal/create-order", {
@@ -1263,6 +1287,7 @@
         if (e.target.value === "paypal") renderPayPalButtons();
       }
     });
+    if (paypalRedirectBtn) paypalRedirectBtn.addEventListener("click", openPayPalRedirect);
     // Intercept "Place Order" to route through the right payment endpoint
     var form = shell.querySelector("[data-checkout-form]");
     if (!form) return;
