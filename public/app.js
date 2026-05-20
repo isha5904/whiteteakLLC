@@ -93,11 +93,23 @@
     if (!container) return;
 
     const cart = readCart();
-    const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const count = cart.reduce((sum, item) => sum + item.quantity, 0);
+    const tax = 0;
+    const total = subtotal + tax;
 
     document.querySelector("[data-cart-items-count]").textContent = count;
-    document.querySelector("[data-cart-total]").textContent = formatCurrency(total);
+    document.querySelectorAll("[data-cart-total]").forEach((node) => {
+      node.textContent = formatCurrency(subtotal);
+    });
+    const cartTaxNode = document.querySelector("[data-cart-tax]");
+    if (cartTaxNode) {
+      cartTaxNode.textContent = formatCurrency(tax);
+    }
+    const cartTotalAmount = document.querySelector("[data-cart-total-amount]");
+    if (cartTotalAmount) {
+      cartTotalAmount.textContent = formatCurrency(total);
+    }
 
     if (!cart.length) {
       container.innerHTML = `<div class="empty-panel">Your cart is empty. Add products from the catalog to continue.</div>`;

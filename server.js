@@ -3513,12 +3513,12 @@ function cartPage(user = null) {
             <h3>Order Summary</h3>
             <div class="cr-cart-row"><span>Subtotal (<em data-cart-items-count>0</em> items)</span><strong data-cart-total>${currency(0)}</strong></div>
             <div class="cr-cart-row"><span>Delivery</span><strong class="cr-cart-free">FREE</strong></div>
-            <div class="cr-cart-row"><span>Estimated Tax</span><strong>Calculated at checkout</strong></div>
+            <div class="cr-cart-row"><span>Estimated Tax</span><strong data-cart-tax>${currency(0)}</strong></div>
             <div class="cr-cart-promo">
               <input type="text" placeholder="Enter promo code">
               <button type="button">Apply</button>
             </div>
-            <div class="cr-cart-row cr-cart-total"><span>Total</span><strong data-cart-total>${currency(0)}</strong></div>
+            <div class="cr-cart-row cr-cart-total"><span>Total</span><strong data-cart-total-amount>${currency(0)}</strong></div>
             <a class="cr-cart-checkout" href="/checkout">Proceed to Checkout</a>
             <p class="cr-cart-secure">Secure checkout · 7-day returns</p>
           </aside>
