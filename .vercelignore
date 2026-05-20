@@ -1,0 +1,8 @@
+node_modules
+.git
+.vercel
+drive-download-*
+server.log
+server.err
+data/store.db
+firebase-key.json
