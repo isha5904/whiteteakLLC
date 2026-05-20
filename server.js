@@ -1301,7 +1301,7 @@ function layout({ title, description = "", currentPath = "/", content, user = nu
       ${renderCromaFooter()}
     </div>
     <script>window.__MAPLE_THEME__=${JSON.stringify(theme || "snow")};</script>
-    <script src="/public/app.js?v=cart-total-20260520"></script>
+    <script src="/public/app.js?v=cart-total-final-20260520"></script>
   </body>
   </html>`;
 }
@@ -3511,7 +3511,7 @@ function cartPage(user = null) {
 
           <aside class="cr-cart-summary">
             <h3>Order Summary</h3>
-            <div class="cr-cart-row"><span>Subtotal (<em data-cart-items-count>0</em> items)</span><strong data-cart-total>${currency(0)}</strong></div>
+            <div class="cr-cart-row"><span>Subtotal (<em data-cart-items-count>0</em> items)</span><strong data-cart-subtotal>${currency(0)}</strong></div>
             <div class="cr-cart-row"><span>Delivery</span><strong class="cr-cart-free">FREE</strong></div>
             <div class="cr-cart-row"><span>Estimated Tax</span><strong data-cart-tax>${currency(0)}</strong></div>
             <div class="cr-cart-promo">

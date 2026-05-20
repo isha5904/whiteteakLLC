@@ -113,15 +113,17 @@
     const subtotal = summary.subtotal;
     const count = summary.count;
     const tax = 0;
-    const total = subtotal;
+    const total = count > 0 ? subtotal : 0;
+    const subtotalText = formatCurrency(subtotal);
+    const totalText = formatCurrency(total);
 
     setText("[data-cart-items-count]", count);
-    setText("[data-cart-total]", formatCurrency(subtotal));
+    setText("[data-cart-subtotal]", subtotalText);
     const cartTaxNode = document.querySelector("[data-cart-tax]");
     if (cartTaxNode) {
       cartTaxNode.textContent = formatCurrency(tax);
     }
-    setText("[data-cart-total-amount], .cr-cart-total strong", formatCurrency(total));
+    setText("[data-cart-total], [data-cart-total-amount], .cr-cart-total strong", totalText);
 
     if (!cart.length) {
       container.innerHTML = `<div class="empty-panel">Your cart is empty. Add products from the catalog to continue.</div>`;
