@@ -920,26 +920,121 @@ function validateCheckoutOrderPayload(o) {
   return { items, total };
 }
 
-function createCheckoutOrderRecord(o, status = "Paid", paymentMethod = "paypal") {
+async function getFirebaseDb() {
+  try {
+    const { firebaseDb } = require("./firebase-config");
+    return firebaseDb || null;
+  } catch {
+    return null;
+  }
+}
+
+function localOrderCodes() {
+  try {
+    return db.prepare("SELECT order_code FROM orders").all().map(row => row.order_code);
+  } catch {
+    return [];
+  }
+}
+
+async function nextOrderCode() {
+  let max = 1000;
+  for (const code of localOrderCodes()) {
+    const n = Number(String(code || "").replace(/^ORD-/i, ""));
+    if (Number.isFinite(n)) max = Math.max(max, n);
+  }
+  const firebaseDb = await getFirebaseDb();
+  if (firebaseDb) {
+    try {
+      const snap = await firebaseDb.collection("orders").get();
+      snap.forEach(doc => {
+        const n = Number(String(doc.id || doc.data()?.order_code || "").replace(/^ORD-/i, ""));
+        if (Number.isFinite(n)) max = Math.max(max, n);
+      });
+    } catch (e) {
+      console.warn("[Firebase] Could not read order codes:", e.message);
+    }
+  }
+  return `ORD-${max + 1}`;
+}
+
+function insertLocalOrder(row, items, reduceStock = true) {
+  db.prepare(`
+    INSERT OR IGNORE INTO orders
+    (order_code, customer_name, email, phone, address, city, state, pincode, status, total, items_json, created_at, payment_method)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    row.order_code,
+    row.customer_name,
+    row.email,
+    row.phone,
+    row.address,
+    row.city,
+    row.state,
+    row.pincode,
+    row.status,
+    row.total,
+    JSON.stringify(items || []),
+    row.created_at,
+    row.payment_method || "COD"
+  );
+  if (reduceStock) {
+    const reduce = db.prepare("UPDATE products SET stock = stock - ? WHERE id = ?");
+    for (const item of items || []) reduce.run(item.quantity, item.id);
+  }
+  if (db.save) db.save();
+}
+
+async function mirrorOrderToFirebase(row, items) {
+  const firebaseDb = await getFirebaseDb();
+  if (!firebaseDb) return;
+  try {
+    await firebaseDb.collection("orders").doc(row.order_code).set({
+      ...row,
+      items,
+      items_json: JSON.stringify(items || []),
+      updated_at: new Date().toISOString()
+    }, { merge: true });
+  } catch (e) {
+    console.warn("[Firebase] Order mirror failed:", e.message);
+  }
+}
+
+async function syncFirebaseOrdersToSqlite() {
+  const firebaseDb = await getFirebaseDb();
+  if (!firebaseDb) return;
+  try {
+    const snap = await firebaseDb.collection("orders").get();
+    snap.forEach(doc => {
+      const data = doc.data() || {};
+      const items = Array.isArray(data.items) ? data.items : JSON.parse(data.items_json || "[]");
+      if (!data.order_code) data.order_code = doc.id;
+      insertLocalOrder(data, items, false);
+    });
+  } catch (e) {
+    console.warn("[Firebase] Order sync failed:", e.message);
+  }
+}
+
+async function createCheckoutOrderRecord(o, status = "Paid", paymentMethod = "paypal") {
   const { items, total } = validateCheckoutOrderPayload(o);
-  const orderCode = `ORD-${1000 + Number(db.prepare("SELECT COUNT(*) AS count FROM orders").get().count) + 1}`;
-  db.prepare(`INSERT INTO orders (order_code, customer_name, email, phone, address, city, state, pincode, status, total, items_json, created_at, payment_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-    orderCode,
-    o.customerName,
-    String(o.email).toLowerCase(),
-    o.phone,
-    o.address,
-    o.city,
-    o.state,
-    o.pincode,
+  const orderCode = await nextOrderCode();
+  const row = {
+    order_code: orderCode,
+    customer_name: o.customerName,
+    email: String(o.email).toLowerCase(),
+    phone: o.phone,
+    address: o.address,
+    city: o.city,
+    state: o.state,
+    pincode: o.pincode,
     status,
     total,
-    JSON.stringify(items),
-    new Date().toISOString(),
-    paymentMethod
-  );
-  const reduceStock = db.prepare("UPDATE products SET stock = stock - ? WHERE id = ?");
-  for (const item of items) reduceStock.run(item.quantity, item.id);
+    created_at: new Date().toISOString(),
+    payment_method: paymentMethod
+  };
+  insertLocalOrder(row, items, true);
+  await mirrorOrderToFirebase(row, items);
   return { orderCode, items, total };
 }
 
@@ -5371,7 +5466,7 @@ async function handleRequest(req, res) {
       const capturedAmount = capture.purchase_units?.[0]?.payments?.captures?.[0]?.amount;
       if (capturedAmount && capturedAmount.currency_code !== PAYPAL_CURRENCY) throw new Error("PayPal currency mismatch");
       if (capturedAmount && Math.abs(Number(capturedAmount.value) - Number(paypalAmountFromInr(total))) > 0.01) throw new Error("PayPal amount mismatch");
-      const { orderCode } = createCheckoutOrderRecord(o, "Paid", "paypal");
+      const { orderCode } = await createCheckoutOrderRecord(o, "Paid", "paypal");
       const redirect = `/order-success/${encodeURIComponent(orderCode)}`;
       db.prepare("UPDATE paypal_pending_orders SET status = 'completed', order_json = ?, completed_at = ? WHERE token = ?")
         .run(JSON.stringify({ ...o, redirect }), new Date().toISOString(), token);
@@ -5396,11 +5491,13 @@ async function handleRequest(req, res) {
   }
 
   if (req.method === "GET" && pathname === "/track") {
+    await syncFirebaseOrdersToSqlite();
     html(res, 200, trackPage(url.searchParams.get("orderId") || "", currentUser));
     return;
   }
 
   if (req.method === "GET" && pathname.startsWith("/order/")) {
+    await syncFirebaseOrdersToSqlite();
     html(res, 200, orderSuccessPage(pathname.split("/").pop(), currentUser));
     return;
   }
@@ -5411,6 +5508,7 @@ async function handleRequest(req, res) {
       res.end();
       return;
     }
+    await syncFirebaseOrdersToSqlite();
     const adminUser = { ...currentUser, __editSlug: url.searchParams.get("edit") || "" };
     html(res, 200, adminPage(adminUser, {
       section: url.searchParams.get("section") || "dashboard",
@@ -5486,6 +5584,8 @@ async function handleRequest(req, res) {
     const status = String(body.status || "").trim();
     if (orderCode && ORDER_STATUS_OPTIONS.includes(status)) {
       db.prepare("UPDATE orders SET status = ? WHERE order_code = ?").run(status, orderCode);
+      const row = db.prepare("SELECT * FROM orders WHERE order_code = ?").get(orderCode);
+      if (row) await mirrorOrderToFirebase(row, JSON.parse(row.items_json || "[]"));
     }
     res.writeHead(302, { Location: "/admin?section=orders" });
     res.end();
@@ -5632,6 +5732,7 @@ async function handleRequest(req, res) {
 
   if (req.method === "GET" && pathname.startsWith("/api/orders/")) {
     const orderCode = pathname.split("/").pop();
+    await syncFirebaseOrdersToSqlite();
     const order = db.prepare("SELECT * FROM orders WHERE order_code = ?").get(orderCode);
     if (!order) {
       json(res, 404, { error: "Order not found" });
@@ -5645,53 +5746,7 @@ async function handleRequest(req, res) {
     try {
       const raw = await readBody(req);
       const payload = JSON.parse(raw || "{}");
-      const required = ["customerName", "email", "phone", "address", "city", "state", "pincode", "items"];
-
-      for (const key of required) {
-        if (!payload[key] || (Array.isArray(payload[key]) && payload[key].length === 0)) {
-          json(res, 400, { error: `Missing ${key}` });
-          return;
-        }
-      }
-      const items = payload.items.map((item) => {
-        const product = db.prepare("SELECT id, name, price, stock FROM products WHERE id = ?").get(item.id);
-        if (!product) {
-          throw new Error(`Product ${item.id} not found`);
-        }
-        const quantity = Math.max(1, Number(item.quantity || 1));
-        if (quantity > product.stock) {
-          throw new Error(`Only ${product.stock} units left for ${product.name}`);
-        }
-        return { id: product.id, name: product.name, price: product.price, quantity };
-      });
-
-      const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-      const orderCode = `ORD-${1000 + Number(db.prepare("SELECT COUNT(*) AS count FROM orders").get().count) + 1}`;
-      const insert = db.prepare(`
-        INSERT INTO orders
-        (order_code, customer_name, email, phone, address, city, state, pincode, status, total, items_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?, ?)
-      `);
-
-      insert.run(
-        orderCode,
-        payload.customerName,
-        String(payload.email).toLowerCase(),
-        payload.phone,
-        payload.address,
-        payload.city,
-        payload.state,
-        payload.pincode,
-        total,
-        JSON.stringify(items),
-        new Date().toISOString()
-      );
-
-      const reduceStock = db.prepare("UPDATE products SET stock = stock - ? WHERE id = ?");
-      for (const item of items) {
-        reduceStock.run(item.quantity, item.id);
-      }
-
+      const { orderCode } = await createCheckoutOrderRecord(payload, "Pending", "COD");
       json(res, 201, { orderCode });
       return;
     } catch (error) {
@@ -5757,7 +5812,7 @@ async function handleRequest(req, res) {
         return { id: product.id, name: product.name, price: product.price, quantity };
       });
       const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
-      const orderCode = `ORD-${1000 + Number(db.prepare("SELECT COUNT(*) AS count FROM orders").get().count) + 1}`;
+      const orderCode = await nextOrderCode();
       db.prepare(`
         INSERT INTO orders
         (order_code, customer_name, email, phone, address, city, state, pincode, status, total, items_json, created_at)
@@ -5775,6 +5830,20 @@ async function handleRequest(req, res) {
         JSON.stringify(items),
         new Date().toISOString()
       );
+      await mirrorOrderToFirebase({
+        order_code: orderCode,
+        customer_name: o.customerName,
+        email: String(o.email).toLowerCase(),
+        phone: o.phone,
+        address: o.address,
+        city: o.city,
+        state: o.state,
+        pincode: o.pincode,
+        status: "Paid",
+        total,
+        created_at: new Date().toISOString(),
+        payment_method: "razorpay"
+      }, items);
       const reduceStock = db.prepare("UPDATE products SET stock = stock - ? WHERE id = ?");
       for (const item of items) reduceStock.run(item.quantity, item.id);
       json(res, 201, { orderCode, redirect: `/order-success/${encodeURIComponent(orderCode)}` });
@@ -6209,7 +6278,7 @@ async function handleRequest(req, res) {
       const o = payload.order || {};
       if (!paypalOrderId) { json(res, 400, { error: "Missing PayPal order id" }); return; }
 
-      const { items, total } = validateCheckoutOrderPayload(o);
+      const { total } = validateCheckoutOrderPayload(o);
       const capture = await capturePayPalOrder(paypalOrderId);
       if (capture.status !== "COMPLETED") {
         json(res, 400, { error: `PayPal capture not completed (${capture.status || "unknown"})` });
@@ -6225,24 +6294,7 @@ async function handleRequest(req, res) {
         return;
       }
 
-      const orderCode = `ORD-${1000 + Number(db.prepare("SELECT COUNT(*) AS count FROM orders").get().count) + 1}`;
-      db.prepare(`INSERT INTO orders (order_code, customer_name, email, phone, address, city, state, pincode, status, total, items_json, created_at, payment_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-        orderCode,
-        o.customerName,
-        String(o.email).toLowerCase(),
-        o.phone,
-        o.address,
-        o.city,
-        o.state,
-        o.pincode,
-        "Paid",
-        total,
-        JSON.stringify(items),
-        new Date().toISOString(),
-        "paypal"
-      );
-      const reduceStock = db.prepare("UPDATE products SET stock = stock - ? WHERE id = ?");
-      for (const item of items) reduceStock.run(item.quantity, item.id);
+      const { orderCode } = await createCheckoutOrderRecord(o, "Paid", "paypal");
       json(res, 200, { ok: true, orderCode, checkoutUrl: `/order-success/${encodeURIComponent(orderCode)}`, redirect: `/order-success/${encodeURIComponent(orderCode)}` });
       return;
     } catch (e) {
@@ -6257,26 +6309,8 @@ async function handleRequest(req, res) {
       const payload = JSON.parse(await readBody(req) || "{}");
       const provider = pathname.includes("stripe") ? "stripe" : pathname.includes("paypal") ? "paypal" : "wise";
       const o = payload.order || payload;
-      const required = ["customerName", "email", "phone", "address", "city", "state", "pincode", "items"];
-      for (const k of required) {
-        if (!o[k] || (Array.isArray(o[k]) && o[k].length === 0)) { json(res, 400, { error: `Missing ${k}` }); return; }
-      }
-
-      const items = o.items.map((item) => {
-        const product = db.prepare("SELECT id, name, price, stock FROM products WHERE id = ?").get(item.id);
-        if (!product) throw new Error(`Product ${item.id} not found`);
-        const quantity = Math.max(1, Number(item.quantity || 1));
-        if (quantity > product.stock) throw new Error(`Only ${product.stock} units left for ${product.name}`);
-        return { id: product.id, name: product.name, price: product.price, quantity };
-      });
-      const total = items.reduce((s, i) => s + i.price * i.quantity, 0);
-      const orderCode = `ORD-${1000 + Number(db.prepare("SELECT COUNT(*) AS count FROM orders").get().count) + 1}`;
       const status = provider === "wise" ? "Awaiting payment confirmation" : "Paid";
-      db.prepare(`INSERT INTO orders (order_code, customer_name, email, phone, address, city, state, pincode, status, total, items_json, created_at, payment_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-        orderCode, o.customerName, String(o.email).toLowerCase(), o.phone, o.address, o.city, o.state, o.pincode, status, total, JSON.stringify(items), new Date().toISOString(), provider
-      );
-      const reduceStock = db.prepare("UPDATE products SET stock = stock - ? WHERE id = ?");
-      for (const it of items) reduceStock.run(it.quantity, it.id);
+      const { orderCode } = await createCheckoutOrderRecord(o, status, provider);
       json(res, 200, { ok: true, orderCode, checkoutUrl: `/order-success/${encodeURIComponent(orderCode)}`, redirect: `/order-success/${encodeURIComponent(orderCode)}` });
       return;
     } catch (e) { json(res, 400, { error: e.message }); return; }
